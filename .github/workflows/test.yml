@@ -17,4 +17,6 @@ jobs:
         with:
           go-version: '1.21'
       - name: Test
-        run: go test -v -race -timeout=30m ./...
+        run: |
+          sudo apt-get install awscli
+          AWS_EC2_METADATA_DISABLED=true; go test -v -race -timeout=30m ./...
