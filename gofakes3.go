@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Mikubill/gofakes3/signature"
 )
 
 // GoFakeS3 implements HTTP handlers for processing S3 requests and returning
@@ -38,6 +40,8 @@ type GoFakeS3 struct {
 	autoBucket              bool          // WithAutoBucket
 	uploader                *uploader
 	log                     Logger
+
+	v4AuthPair map[string]string // key id -> secret key
 }
 
 // New creates a new GoFakeS3 using the supplied Backend. Backends are pluggable.
@@ -66,6 +70,10 @@ func New(backend Backend, options ...Option) *GoFakeS3 {
 		s3.timeSource = DefaultTimeSource()
 	}
 
+	if len(s3.v4AuthPair) != 0 {
+		s3.AddAuthKeys(s3.v4AuthPair)
+	}
+
 	return s3
 }
 
@@ -87,7 +95,39 @@ func (g *GoFakeS3) Server() http.Handler {
 		handler = g.hostBucketMiddleware(handler)
 	}
 
-	return handler
+	return g.authMiddleware(handler)
+}
+
+func (g *GoFakeS3) AddAuthKeys(p map[string]string) {
+	for k, v := range p {
+		g.v4AuthPair[k] = v
+	}
+	signature.StoreKeys(g.v4AuthPair)
+}
+
+func (g *GoFakeS3) DelAuthKeys(p []string) {
+	for _, v := range p {
+		delete(g.v4AuthPair, v)
+	}
+	signature.ReloadKeys(g.v4AuthPair)
+}
+
+func (g *GoFakeS3) authMiddleware(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, rq *http.Request) {
+		if len(g.v4AuthPair) > 0 {
+			if result := signature.V4SignVerify(rq); result != signature.ErrNone {
+				g.log.Print(LogWarn, "Access Denied:", rq.RemoteAddr, "=>", rq.URL)
+
+				resp := signature.GetAPIError(result)
+				w.WriteHeader(resp.HTTPStatusCode)
+				w.Header().Add("content-type", "application/xml")
+				_, _ = w.Write(signature.EncodeAPIErrorToResponse(resp))
+				return
+			}
+		}
+
+		handler.ServeHTTP(w, rq)
+	})
 }
 
 func (g *GoFakeS3) timeSkewMiddleware(handler http.Handler) http.Handler {
