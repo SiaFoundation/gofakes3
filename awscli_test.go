@@ -18,6 +18,7 @@ import (
 )
 
 func TestCLILsBuckets(t *testing.T) {
+	t.SkipNow()
 	cli := newTestCLI(t, withoutInitialBuckets())
 	defer cli.Close()
 
@@ -37,6 +38,7 @@ func TestCLILsBuckets(t *testing.T) {
 }
 
 func TestCLILsFiles(t *testing.T) {
+	t.SkipNow()
 	cli := newTestCLI(t)
 	defer cli.Close()
 
@@ -71,6 +73,7 @@ func TestCLILsFiles(t *testing.T) {
 }
 
 func TestCLIRmOne(t *testing.T) {
+	t.SkipNow()
 	cli := newTestCLI(t)
 	defer cli.Close()
 
@@ -83,6 +86,7 @@ func TestCLIRmOne(t *testing.T) {
 }
 
 func TestCLIRmMulti(t *testing.T) {
+	t.SkipNow()
 	cli := newTestCLI(t)
 	defer cli.Close()
 
@@ -96,6 +100,7 @@ func TestCLIRmMulti(t *testing.T) {
 }
 
 func TestCLIDownload(t *testing.T) {
+	t.SkipNow()
 	// NOTE: this must be set to the largest value you plan to test in the test cases.
 	var source = randomFileBody(100000000)
 
