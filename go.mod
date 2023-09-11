@@ -1,4 +1,4 @@
-module github.com/johannesboyne/gofakes3
+module github.com/SiaFoundation/gofakes3
 
 go 1.16
 
