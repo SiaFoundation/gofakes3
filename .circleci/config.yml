@@ -8,7 +8,7 @@ jobs:
       GO111MODULE=on
     docker:
     - image: circleci/golang:1.16
-    working_directory: /go/src/github.com/johannesboyne/gofakes3
+    working_directory: /go/src/github.com/SiaFoundation/gofakes3
     steps:
     - checkout
     - run: go get -v -t -d ./...

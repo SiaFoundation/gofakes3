@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/johannesboyne/gofakes3/internal/goskipiter"
+	"github.com/SiaFoundation/gofakes3/internal/goskipiter"
 	"github.com/ryszard/goskiplist/skiplist"
 )
 
@@ -28,6 +28,7 @@ A skiplist that maps object keys to upload ids is also maintained to
 support the ListMultipartUploads operation.
 
 From the docs:
+
 	In the response, the uploads are sorted by key. If your application has
 	initiated more than one multipart upload using the same object key,
 	then uploads in the response are first sorted by key. Additionally,
@@ -135,13 +136,13 @@ func (bu *bucketUploads) remove(uploadID UploadID) {
 // Multipart upload support has the following rather severe limitations (which
 // will hopefully be addressed in the future):
 //
-//	- uploads do not interface with the Backend, so they do not
-// 	  currently persist across reboots
+//   - uploads do not interface with the Backend, so they do not
+//     currently persist across reboots
 //
-//	- upload parts are held in memory, so if you want to upload something huge
-//	  in multiple parts (which is pretty much exactly what you'd want multipart
-//	  uploads for), you'll need to make sure your memory is also sufficiently
-//	  huge!
+//   - upload parts are held in memory, so if you want to upload something huge
+//     in multiple parts (which is pretty much exactly what you'd want multipart
+//     uploads for), you'll need to make sure your memory is also sufficiently
+//     huge!
 //
 // At this stage, the current thinking would be to add a second optional
 // Backend interface that allows persistent operations on multipart upload
