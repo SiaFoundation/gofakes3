@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	accessKeyMinLen = 3
-	// secretKeyMinLen = 8
+	AccessKeyMinLen = 16
+	AccessKeyMaxLen = 128
 )
 
 // check if the access key is valid and recognized, additionally
