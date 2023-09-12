@@ -201,7 +201,11 @@ func newTestServer(t *testing.T, opts ...testServerOption) *testServer {
 	}
 	fakerOpts = append(fakerOpts, ts.options...)
 
-	ts.GoFakeS3 = gofakes3.New(ts.backend, fakerOpts...)
+	var err error
+	ts.GoFakeS3, err = gofakes3.New(ts.backend, fakerOpts...)
+	if err != nil {
+		ts.Fatal(err)
+	}
 	ts.server = httptest.NewServer(ts.GoFakeS3.Server())
 
 	for _, bucket := range ts.initialBuckets {

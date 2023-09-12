@@ -261,7 +261,7 @@ func run() error {
 		logger = gofakes3.DiscardLog()
 	}
 
-	faker := gofakes3.New(backend,
+	faker, err := gofakes3.New(backend,
 		gofakes3.WithIntegrityCheck(!values.noIntegrity),
 		gofakes3.WithTimeSkewLimit(timeSkewLimit),
 		gofakes3.WithTimeSource(timeSource),
@@ -270,6 +270,9 @@ func run() error {
 		gofakes3.WithHostBucketBase(values.hostBucketBases.Values...),
 		gofakes3.WithAutoBucket(values.autoBucket),
 	)
+	if err != nil {
+		return fmt.Errorf("gofakes3: could not create faker: %w", err)
+	}
 
 	return listenAndServe(values.host, faker.Server())
 }

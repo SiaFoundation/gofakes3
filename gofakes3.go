@@ -46,7 +46,7 @@ type GoFakeS3 struct {
 // New creates a new GoFakeS3 using the supplied Backend. Backends are pluggable.
 // Several Backend implementations ship with GoFakeS3, which can be found in the
 // gofakes3/backends package.
-func New(backend Backend, options ...Option) *GoFakeS3 {
+func New(backend Backend, options ...Option) (*GoFakeS3, error) {
 	s3 := &GoFakeS3{
 		storage:           backend,
 		timeSkew:          DefaultSkewLimit,
@@ -74,10 +74,11 @@ func New(backend Backend, options ...Option) *GoFakeS3 {
 	}
 
 	if len(s3.v4AuthPair) != 0 {
-		s3.AddAuthKeys(s3.v4AuthPair)
+		if err := s3.AddAuthKeys(s3.v4AuthPair); err != nil {
+			return nil, fmt.Errorf("failed to add auth keys: %w", err)
+		}
 	}
-
-	return s3
+	return s3, nil
 }
 
 func (g *GoFakeS3) nextRequestID() uint64 {
@@ -101,11 +102,15 @@ func (g *GoFakeS3) Server() http.Handler {
 	return g.authMiddleware(handler)
 }
 
-func (g *GoFakeS3) AddAuthKeys(p map[string]string) {
+func (g *GoFakeS3) AddAuthKeys(p map[string]string) error {
 	for k, v := range p {
+		if len(k) < signature.AccessKeyMinLen || len(k) > signature.AccessKeyMaxLen {
+			return fmt.Errorf("access key identifier length must be in range [%d-%d] but was: %d", signature.AccessKeyMinLen, signature.AccessKeyMaxLen, len(k))
+		}
 		g.v4AuthPair[k] = v
 	}
 	signature.StoreKeys(g.v4AuthPair)
+	return nil
 }
 
 func (g *GoFakeS3) DelAuthKeys(p []string) {
