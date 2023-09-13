@@ -90,12 +90,7 @@ func extractFields(signElement, fieldName string) (string, ErrorCode) {
 //
 //	Authorization: algorithm Credential=accessKeyID/credScope,  SignedHeaders=signedHeaders, Signature=signature
 func parseSignV4(v4Auth string) (sv signValues, err ErrorCode) {
-
-	if !strings.HasPrefix(v4Auth, signV4Algorithm) {
-		return sv, errUnsupportAlgorithm
-	}
-
-	rawCred := strings.ReplaceAll(strings.TrimPrefix(v4Auth, signV4Algorithm), " ", "")
+	rawCred := strings.ReplaceAll(strings.TrimPrefix(v4Auth, "AWS4-HMAC-SHA256"), " ", "")
 	authFields := strings.Split(strings.TrimSpace(rawCred), ",")
 	if len(authFields) != 3 {
 		return sv, errMissingFields

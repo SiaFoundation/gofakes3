@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
+	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,18 +17,19 @@ import (
 // ref: https://github.com/minio/minio/cmd/auth-handler.go
 
 const (
-	signV4Algorithm = "AWS4-HMAC-SHA256"
-	iso8601Format   = "20060102T150405Z"
-	yyyymmdd        = "20060102"
-	serviceS3       = "s3"
-	slashSeparator  = "/"
-	stype           = serviceS3
+	iso8601Format  = "20060102T150405Z"
+	yyyymmdd       = "20060102"
+	serviceS3      = "s3"
+	slashSeparator = "/"
+	stype          = serviceS3
 
 	headerAuth       = "Authorization"
 	headerDate       = "Date"
 	amzContentSha256 = "X-Amz-Content-Sha256"
 	amzDate          = "X-Amz-Date"
 )
+
+var errSignatureMismatch = errors.New("Signature does not match")
 
 // getCanonicalHeaders generate a list of request headers with their values
 func getCanonicalHeaders(signedHeaders http.Header) string {
@@ -50,6 +54,17 @@ func getCanonicalHeaders(signedHeaders http.Header) string {
 		buf.WriteByte('\n')
 	}
 	return buf.String()
+}
+
+// getScope generate a string of a specific date, an AWS region, and a service.
+func getScope(t time.Time, region string) string {
+	scope := strings.Join([]string{
+		t.Format(yyyymmdd),
+		region,
+		string(serviceS3),
+		"aws4_request",
+	}, slashSeparator)
+	return scope
 }
 
 // getSignedHeaders generate a string i.e alphabetically sorted, semicolon-separated list of lowercase request header names
@@ -110,7 +125,7 @@ func getCanonicalRequest(extractedSignedHeaders http.Header, payload, queryStr, 
 
 // getStringToSign a string based on selected query values.
 func getStringToSign(canonicalRequest string, t time.Time, scope string) string {
-	stringToSign := signV4Algorithm + "\n" + t.Format(iso8601Format) + "\n"
+	stringToSign := "AWS4-HMAC-SHA256\n" + t.Format(iso8601Format) + "\n"
 	stringToSign += scope + "\n"
 	canonicalRequestBytes := sha256.Sum256([]byte(canonicalRequest))
 	stringToSign += hex.EncodeToString(canonicalRequestBytes[:])
@@ -126,11 +141,7 @@ func getSigningKey(secretKey string, t time.Time, region string) []byte {
 	return signingKey
 }
 
-// V4SignVerify - Verify authorization header with calculated header in accordance with
-//   - http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
-//
-// returns nil if signature matches.
-func V4SignVerify(r *http.Request) ErrorCode {
+func authTypeSignedVerify(r *http.Request) ErrorCode {
 	// Copy request.
 	req := *r
 	hashedPayload := getContentSha256Cksum(r)
@@ -191,4 +202,51 @@ func V4SignVerify(r *http.Request) ErrorCode {
 
 	// Return Error none.
 	return ErrNone
+}
+
+func authTypeStreamingVerify(r *http.Request, authType authType) ErrorCode {
+	var size int64
+	if sizeStr, ok := r.Header["X-Amz-Decoded-Content-Length"]; ok {
+		if sizeStr[0] == "" {
+			return errMissingContentLength
+		}
+		var err error
+		size, err = strconv.ParseInt(sizeStr[0], 10, 64)
+		if err != nil {
+			return errMissingContentLength
+		}
+	}
+	var rc io.ReadCloser
+	var ec ErrorCode
+	switch authType {
+	case authTypeStreamingSigned, authTypeStreamingSignedTrailer:
+		rc, ec = newSignV4ChunkedReader(r, authType == authTypeStreamingSignedTrailer)
+	case authTypeStreamingUnsignedTrailer:
+		return errUnsupportAlgorithm // not supported
+	default:
+		panic("can't call authTypeStreamingVerify with a non streaming auth type")
+	}
+	if ec != ErrNone {
+		return ec
+	}
+	r.Body = rc
+	r.ContentLength = size
+	return ErrNone
+}
+
+// V4SignVerify - Verify authorization header with calculated header in accordance with
+//   - http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
+//
+// returns nil if signature matches.
+func V4SignVerify(r *http.Request) ErrorCode {
+	// Make sure the authentication type is supported.
+	authType := getRequestAuthType(r)
+	switch authType {
+	case authTypeStreamingSigned, authTypeStreamingSignedTrailer, authTypeStreamingUnsignedTrailer:
+		return authTypeStreamingVerify(r, authType)
+	case authTypeSigned:
+		return authTypeSignedVerify(r)
+	default:
+		return errUnsupportAlgorithm
+	}
 }

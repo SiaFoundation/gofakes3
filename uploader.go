@@ -368,9 +368,6 @@ func (u *uploader) AbortMultipartUpload(bucket, object string, id UploadID) erro
 }
 
 func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error) {
-	if partNumber > MaxUploadPartNumber {
-		return "", ErrInvalidPart
-	}
 	body, err := io.ReadAll(input)
 	if err != nil {
 		return "", err

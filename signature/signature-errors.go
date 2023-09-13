@@ -29,11 +29,13 @@ type errorCodeMap map[ErrorCode]APIError
 const (
 	errMissingFields ErrorCode = iota
 	errMissingCredTag
+	errContentSHA256Mismatch
 	errCredMalformed
 	errInvalidAccessKeyID
 	errMalformedCredentialDate
 	errInvalidRequestVersion
 	errInvalidServiceS3
+	errMissingContentLength
 	errMissingSignHeadersTag
 	errMissingSignTag
 	errUnsignedHeaders
@@ -57,6 +59,11 @@ var errorCodes = errorCodeMap{
 	errMissingCredTag: {
 		Code:           "InvalidRequest",
 		Description:    "Missing Credential field for this request.",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	errContentSHA256Mismatch: {
+		Code:           "XAmzContentSHA256Mismatch",
+		Description:    "The provided 'x-amz-content-sha256' header does not match what was computed.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
 	errCredMalformed: {
@@ -83,6 +90,11 @@ var errorCodes = errorCodeMap{
 		Code:           "AuthorizationParameterserror",
 		Description:    "error parsing the Credential/X-Amz-Credential parameter; incorrect service. This endpoint belongs to \"s3\".",
 		HTTPStatusCode: http.StatusBadRequest,
+	},
+	errMissingContentLength: {
+		Code:           "MissingContentLength",
+		Description:    "You must provide the Content-Length HTTP header.",
+		HTTPStatusCode: http.StatusLengthRequired,
 	},
 	errMissingSignHeadersTag: {
 		Code:           "InvalidArgument",

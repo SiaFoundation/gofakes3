@@ -3,7 +3,6 @@ module github.com/SiaFoundation/gofakes3
 go 1.16
 
 require (
-	github.com/Mikubill/gofakes3 v0.0.3-0.20230622102024-284c0f988700
 	github.com/aws/aws-sdk-go v1.44.256
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46
 	github.com/shabbyrobe/gocovmerge v0.0.0-20190829150210-3e036491d500
