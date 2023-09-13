@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -231,6 +232,7 @@ func authTypeStreamingVerify(r *http.Request, authType authType) ErrorCode {
 	}
 	r.Body = rc
 	r.ContentLength = size
+	r.Header.Set("Content-Length", fmt.Sprint(size))
 	return ErrNone
 }
 

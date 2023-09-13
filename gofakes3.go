@@ -698,22 +698,9 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 		}
 	}
 
-	var reader io.Reader
-
-	if sha, ok := meta["X-Amz-Content-Sha256"]; ok && sha == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
-		reader = newChunkedReader(r.Body)
-		size, err = strconv.ParseInt(meta["X-Amz-Decoded-Content-Length"], 10, 64)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest) // XXX: no code for this, according to s3tests
-			return nil
-		}
-	} else {
-		reader = r.Body
-	}
-
 	// hashingReader is still needed to get the ETag even if integrityCheck
 	// is set to false:
-	rdr, err := newHashingReader(reader, md5Base64)
+	rdr, err := newHashingReader(r.Body, md5Base64)
 	defer r.Body.Close()
 	if err != nil {
 		return err
