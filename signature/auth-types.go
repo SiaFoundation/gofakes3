@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ref: https://github.com/minio/minio/cmd/auth-handler.go
+// ref: https://github.com/minio/minio/master/cmd/auth-handler.go
 
 type authType int
 

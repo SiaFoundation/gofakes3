@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// ref: https://github.com/minio/minio/cmd/auth-handler.go
+// ref: https://github.com/minio/minio/master/cmd/auth-handler.go
 
 const (
 	iso8601Format  = "20060102T150405Z"
