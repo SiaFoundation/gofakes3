@@ -182,7 +182,7 @@ func authTypeSignedVerify(r *http.Request) ErrorCode {
 	}
 
 	// Query string.
-	queryStr := req.URL.RawQuery
+	queryStr := req.Form.Encode()
 
 	// Get canonical request.
 	canonicalRequest := getCanonicalRequest(extractedSignedHeaders, hashedPayload, queryStr, req.URL.Path, req.Method)
