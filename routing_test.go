@@ -24,9 +24,9 @@ func TestRoutingSlashes(t *testing.T) {
 	assertStatus("nope", 404) // sanity check missing URL
 	assertStatus("test", 200)
 	assertStatus("test/", 200)
-	assertStatus("test//", 200) // don't care how many slashes
+	assertStatus("test//", 404)
 	assertStatus("test/nope", 404)
 	assertStatus("test/obj", 200)
-	assertStatus("test/obj/", 200)
-	assertStatus("test/obj//", 200)
+	assertStatus("test/obj/", 404)
+	assertStatus("test/obj//", 404)
 }
