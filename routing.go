@@ -37,6 +37,7 @@ func (g *GoFakeS3) routeBase(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) == 2 {
 		object = parts[1]
+		fmt.Println("object", object, path)
 	}
 
 	if uploadID := UploadID(query.Get("uploadId")); uploadID != "" {
