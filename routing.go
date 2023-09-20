@@ -19,6 +19,7 @@ import (
 // verbs, but outside the core functionality, the clean separation starts
 // to degrade, especially around multipart uploads.
 func (g *GoFakeS3) routeBase(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("path untouched", r.URL)
 	var (
 		path   = strings.TrimPrefix(r.URL.Path, "/")
 		parts  = strings.SplitN(path, "/", 2)
