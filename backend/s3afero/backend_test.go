@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -59,7 +60,7 @@ func TestPutGet(t *testing.T) {
 				t.Fatal(obj.Metadata, "!=", meta)
 			}
 
-			result, err := ioutil.ReadAll(obj.Contents)
+			result, err := io.ReadAll(obj.Contents)
 			defer obj.Contents.Close()
 			if err != nil {
 				t.Fatal(err)
@@ -105,7 +106,7 @@ func TestPutGetRange(t *testing.T) {
 				t.Fatal(obj.Metadata, "!=", meta)
 			}
 
-			result, err := ioutil.ReadAll(obj.Contents)
+			result, err := io.ReadAll(obj.Contents)
 			defer obj.Contents.Close()
 			if err != nil {
 				t.Fatal(err)

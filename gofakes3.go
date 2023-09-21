@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/textproto"
@@ -1096,7 +1095,7 @@ func (g *GoFakeS3) xmlEncoder(w http.ResponseWriter) *xml.Encoder {
 }
 
 func (g *GoFakeS3) xmlDecodeBody(rdr io.ReadCloser, into interface{}) error {
-	body, err := ioutil.ReadAll(rdr)
+	body, err := io.ReadAll(rdr)
 	defer rdr.Close()
 	if err != nil {
 		return err
