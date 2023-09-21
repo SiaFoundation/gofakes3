@@ -461,6 +461,17 @@ func (g *GoFakeS3) headBucket(bucket string, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
+	// If autoBucket is not specified, ensureBucket is a no-op so we need to
+	// check manually.
+	if !g.autoBucket {
+		exists, err := g.storage.BucketExists(bucket)
+		if err != nil {
+			return err
+		} else if !exists {
+			return ErrNoSuchBucket
+		}
+	}
+
 	w.Write([]byte{})
 	return nil
 }
