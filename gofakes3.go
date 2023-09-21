@@ -1067,18 +1067,22 @@ func (g *GoFakeS3) putBucketVersioning(bucket string, w http.ResponseWriter, r *
 }
 
 func (g *GoFakeS3) ensureBucketExists(bucket string) error {
+	if !g.autoBucket {
+		return nil // nothing to do
+	}
+
 	exists, err := g.storage.BucketExists(bucket)
 	if err != nil {
 		return err
+	} else if exists {
+		return nil
 	}
-	if !exists && g.autoBucket {
-		if err := g.storage.CreateBucket(bucket); err != nil {
-			g.log.Print(LogErr, "autobucket create failed:", err)
-			return ResourceError(ErrNoSuchBucket, bucket)
-		}
-	} else if !exists {
+
+	if err := g.storage.CreateBucket(bucket); err != nil {
+		g.log.Print(LogErr, "autobucket create failed:", err)
 		return ResourceError(ErrNoSuchBucket, bucket)
 	}
+
 	return nil
 }
 
