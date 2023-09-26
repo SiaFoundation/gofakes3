@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3/signature"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"go.sia.tech/gofakes3/signature"
 )
 
 //nolint:all

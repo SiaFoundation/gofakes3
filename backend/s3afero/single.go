@@ -1,6 +1,7 @@
 package s3afero
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
@@ -13,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/s3io"
 	"github.com/spf13/afero"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/s3io"
 )
 
 // SingleBucketBackend is a gofakes3.Backend that allows you to treat an existing
@@ -68,7 +69,7 @@ func SingleBucket(name string, fs afero.Fs, metaFs afero.Fs, opts ...SingleOptio
 	return b, nil
 }
 
-func (db *SingleBucketBackend) ListBuckets() ([]gofakes3.BucketInfo, error) {
+func (db *SingleBucketBackend) ListBuckets(_ context.Context) ([]gofakes3.BucketInfo, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -90,7 +91,7 @@ func (db *SingleBucketBackend) ListBuckets() ([]gofakes3.BucketInfo, error) {
 	}, nil
 }
 
-func (db *SingleBucketBackend) ListBucket(bucket string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
+func (db *SingleBucketBackend) ListBucket(_ context.Context, bucket string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
 	if bucket != db.name {
 		return nil, gofakes3.BucketNotFound(bucket)
 	}
@@ -229,7 +230,7 @@ func (db *SingleBucketBackend) ensureMeta(
 	}
 }
 
-func (db *SingleBucketBackend) HeadObject(bucketName, objectName string) (*gofakes3.Object, error) {
+func (db *SingleBucketBackend) HeadObject(_ context.Context, bucketName, objectName string) (*gofakes3.Object, error) {
 	if bucketName != db.name {
 		return nil, gofakes3.BucketNotFound(bucketName)
 	}
@@ -261,7 +262,7 @@ func (db *SingleBucketBackend) HeadObject(bucketName, objectName string) (*gofak
 	}, nil
 }
 
-func (db *SingleBucketBackend) GetObject(bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (obj *gofakes3.Object, err error) {
+func (db *SingleBucketBackend) GetObject(_ context.Context, bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (obj *gofakes3.Object, err error) {
 	if bucketName != db.name {
 		return nil, gofakes3.BucketNotFound(bucketName)
 	}
@@ -320,6 +321,7 @@ func (db *SingleBucketBackend) GetObject(bucketName, objectName string, rangeReq
 }
 
 func (db *SingleBucketBackend) PutObject(
+	ctx context.Context,
 	bucketName, objectName string,
 	meta map[string]string,
 	input io.Reader, size int64,
@@ -329,7 +331,7 @@ func (db *SingleBucketBackend) PutObject(
 		return result, gofakes3.BucketNotFound(bucketName)
 	}
 
-	err = gofakes3.MergeMetadata(db, bucketName, objectName, meta)
+	err = gofakes3.MergeMetadata(ctx, db, bucketName, objectName, meta)
 	if err != nil {
 		return result, err
 	}
@@ -393,7 +395,7 @@ func (db *SingleBucketBackend) PutObject(
 	return result, nil
 }
 
-func (db *SingleBucketBackend) DeleteMulti(bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, rerr error) {
+func (db *SingleBucketBackend) DeleteMulti(ctx context.Context, bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, rerr error) {
 	if bucketName != db.name {
 		return result, gofakes3.BucketNotFound(bucketName)
 	}
@@ -419,11 +421,11 @@ func (db *SingleBucketBackend) DeleteMulti(bucketName string, objects ...string)
 	return result, nil
 }
 
-func (db *SingleBucketBackend) CopyObject(srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
-	return gofakes3.CopyObject(db, srcBucket, srcKey, dstBucket, dstKey, meta)
+func (db *SingleBucketBackend) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
+	return gofakes3.CopyObject(ctx, db, srcBucket, srcKey, dstBucket, dstKey, meta)
 }
 
-func (db *SingleBucketBackend) DeleteObject(bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
+func (db *SingleBucketBackend) DeleteObject(ctx context.Context, bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
 	if bucketName != db.name {
 		return result, gofakes3.BucketNotFound(bucketName)
 	}
@@ -449,16 +451,16 @@ func (db *SingleBucketBackend) deleteObjectLocked(bucketName, objectName string)
 
 // CreateBucket cannot be implemented by this backend. See MultiBucketBackend if you
 // need a backend that supports it.
-func (db *SingleBucketBackend) CreateBucket(name string) error {
+func (db *SingleBucketBackend) CreateBucket(_ context.Context, name string) error {
 	return gofakes3.ErrNotImplemented
 }
 
 // DeleteBucket cannot be implemented by this backend. See MultiBucketBackend if you
 // need a backend that supports it.
-func (db *SingleBucketBackend) DeleteBucket(name string) error {
+func (db *SingleBucketBackend) DeleteBucket(_ context.Context, name string) error {
 	return gofakes3.ErrNotImplemented
 }
 
-func (db *SingleBucketBackend) BucketExists(name string) (exists bool, err error) {
+func (db *SingleBucketBackend) BucketExists(_ context.Context, name string) (exists bool, err error) {
 	return db.name == name, nil
 }

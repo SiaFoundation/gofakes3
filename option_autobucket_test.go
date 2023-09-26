@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/SiaFoundation/gofakes3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"go.sia.tech/gofakes3"
 )
 
 const autoBucket = "autobucket"

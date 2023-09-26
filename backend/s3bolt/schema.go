@@ -10,9 +10,9 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/s3io"
 	bolt "go.etcd.io/bbolt"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/s3io"
 	"gopkg.in/mgo.v2/bson"
 )
 

@@ -3,6 +3,7 @@ package gofakes3_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -16,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/backend/s3mem"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/backend/s3mem"
 )
 
 func TestCreateBucket(t *testing.T) {
@@ -403,7 +404,7 @@ func TestCopyObject(t *testing.T) {
 		ts.Fatal("bad etag", *out.CopyObjectResult.ETag)
 	}
 
-	obj, err := ts.backend.GetObject(defaultBucket, "dst-key", nil)
+	obj, err := ts.backend.GetObject(context.Background(), defaultBucket, "dst-key", nil)
 	ts.OK(err)
 
 	defer obj.Contents.Close()

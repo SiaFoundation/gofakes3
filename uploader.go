@@ -2,6 +2,7 @@ package gofakes3
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -12,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3/internal/goskipiter"
 	"github.com/ryszard/goskiplist/skiplist"
+	"go.sia.tech/gofakes3/internal/goskipiter"
 )
 
 var _ MultipartBackend = &uploader{}
@@ -171,7 +172,7 @@ func newUploader(b Backend, timeSource TimeSource) *uploader {
 	}
 }
 
-func (u *uploader) CreateMultipartUpload(bucket, object string, meta map[string]string) (UploadID, error) {
+func (u *uploader) CreateMultipartUpload(_ context.Context, bucket, object string, meta map[string]string) (UploadID, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -197,7 +198,7 @@ func (u *uploader) CreateMultipartUpload(bucket, object string, meta map[string]
 	return mpu.ID, nil
 }
 
-func (u *uploader) ListParts(bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error) {
+func (u *uploader) ListParts(_ context.Context, bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -240,7 +241,7 @@ func (u *uploader) ListParts(bucket, object string, uploadID UploadID, marker in
 	return &result, nil
 }
 
-func (u *uploader) ListMultipartUploads(bucket string, marker *UploadListMarker, prefix Prefix, limit int64) (*ListMultipartUploadsResult, error) {
+func (u *uploader) ListMultipartUploads(_ context.Context, bucket string, marker *UploadListMarker, prefix Prefix, limit int64) (*ListMultipartUploadsResult, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
@@ -353,7 +354,7 @@ done:
 	return &result, nil
 }
 
-func (u *uploader) AbortMultipartUpload(bucket, object string, id UploadID) error {
+func (u *uploader) AbortMultipartUpload(_ context.Context, bucket, object string, id UploadID) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	_, err := u.getUnlocked(bucket, object, id)
@@ -367,7 +368,7 @@ func (u *uploader) AbortMultipartUpload(bucket, object string, id UploadID) erro
 	return nil
 }
 
-func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error) {
+func (u *uploader) UploadPart(_ context.Context, bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error) {
 	body, err := io.ReadAll(input)
 	if err != nil {
 		return "", err
@@ -402,7 +403,7 @@ func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int
 	return etag, nil
 }
 
-func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (version VersionID, etag string, err error) {
+func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (version VersionID, etag string, err error) {
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
 		return "", "", err
@@ -446,7 +447,7 @@ func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, i
 
 	hash := fmt.Sprintf("%x", md5.Sum(body))
 
-	result, err := u.storage.PutObject(bucket, object, mpu.Meta, bytes.NewReader(body), int64(len(body)))
+	result, err := u.storage.PutObject(ctx, bucket, object, mpu.Meta, bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return "", "", err
 	}

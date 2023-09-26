@@ -14,6 +14,8 @@ import (
 const (
 	ErrNone ErrorCode = ""
 
+	ErrAccessDenied ErrorCode = "AccessDenied"
+
 	// The Content-MD5 you specified did not match what we received.
 	ErrBadDigest ErrorCode = "BadDigest"
 
@@ -215,6 +217,8 @@ func (e InternalErrorCode) Error() string        { return string(ErrInternal) }
 // know!
 func (e ErrorCode) Message() string {
 	switch e {
+	case ErrAccessDenied:
+		return "Access to the requested resource is denied"
 	case ErrInvalidBucketName:
 		return `Bucket name must match the regex "^[a-zA-Z0-9.\-_]{1,255}$"`
 	case ErrNoSuchBucket:
@@ -230,6 +234,9 @@ func (e ErrorCode) Message() string {
 
 func (e ErrorCode) Status() int {
 	switch e {
+	case ErrAccessDenied:
+		return http.StatusForbidden
+
 	case ErrBucketAlreadyExists,
 		ErrBucketNotEmpty:
 		return http.StatusConflict

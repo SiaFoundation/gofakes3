@@ -1,6 +1,7 @@
 package gofakes3
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
@@ -15,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3/signature"
+	"go.sia.tech/gofakes3/signature"
 )
 
 // GoFakeS3 implements HTTP handlers for processing S3 requests and returning
@@ -98,7 +99,11 @@ func (g *GoFakeS3) Server() http.Handler {
 		handler = g.hostBucketMiddleware(handler)
 	}
 
-	return g.authMiddleware(handler)
+	ab, ok := g.storage.(AuthenticatedBackend)
+	if ok {
+		handler = ab.AuthenticationMiddleware(handler)
+	}
+	return handler
 }
 
 func (g *GoFakeS3) AddAuthKeys(p map[string]string) error {
@@ -117,24 +122,6 @@ func (g *GoFakeS3) DelAuthKeys(p []string) {
 		delete(g.v4AuthPair, v)
 	}
 	signature.ReloadKeys(g.v4AuthPair)
-}
-
-func (g *GoFakeS3) authMiddleware(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, rq *http.Request) {
-		if len(g.v4AuthPair) > 0 {
-			if result := signature.V4SignVerify(rq); result != signature.ErrNone {
-				g.log.Print(LogWarn, "Access Denied:", rq.RemoteAddr, "=>", rq.URL)
-
-				resp := signature.GetAPIError(result)
-				w.WriteHeader(resp.HTTPStatusCode)
-				w.Header().Add("content-type", "application/xml")
-				_, _ = w.Write(signature.EncodeAPIErrorToResponse(resp))
-				return
-			}
-		}
-
-		handler.ServeHTTP(w, rq)
-	})
 }
 
 func (g *GoFakeS3) timeSkewMiddleware(handler http.Handler) http.Handler {
@@ -230,7 +217,7 @@ func (g *GoFakeS3) httpError(w http.ResponseWriter, r *http.Request, err error) 
 }
 
 func (g *GoFakeS3) listBuckets(w http.ResponseWriter, r *http.Request) error {
-	buckets, err := g.storage.ListBuckets()
+	buckets, err := g.storage.ListBuckets(r.Context())
 	if err != nil {
 		return err
 	}
@@ -261,7 +248,7 @@ func (g *GoFakeS3) listBuckets(w http.ResponseWriter, r *http.Request) error {
 func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "LIST BUCKET")
 
-	if err := g.ensureBucketExists(bucketName); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucketName); err != nil {
 		return err
 	}
 
@@ -276,7 +263,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 
 	g.log.Print(LogInfo, "bucketname:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
 
-	objects, err := g.storage.ListBucket(bucketName, &prefix, page)
+	objects, err := g.storage.ListBucket(r.Context(), bucketName, &prefix, page)
 	if err != nil {
 		if err == ErrInternalPageNotImplemented && !g.failOnUnimplementedPage {
 			// We have observed (though not yet confirmed) that simple clients
@@ -284,7 +271,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 			// default if this is not implemented is to retry without it. If
 			// you care about this performance impact for some weird reason,
 			// you'll need to handle it yourself.
-			objects, err = g.storage.ListBucket(bucketName, &prefix, ListBucketPage{})
+			objects, err = g.storage.ListBucket(r.Context(), bucketName, &prefix, ListBucketPage{})
 			if err != nil {
 				return err
 			}
@@ -359,7 +346,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 func (g *GoFakeS3) getBucketLocation(bucketName string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "GET BUCKET LOCATION")
 
-	if err := g.ensureBucketExists(bucketName); err != nil { // S300006
+	if err := g.ensureBucketExists(r.Context(), bucketName); err != nil { // S300006
 		return err
 	}
 
@@ -376,7 +363,7 @@ func (g *GoFakeS3) listBucketVersions(bucketName string, w http.ResponseWriter, 
 		return ErrNotImplemented
 	}
 
-	if err := g.ensureBucketExists(bucketName); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucketName); err != nil {
 		return err
 	}
 
@@ -401,7 +388,7 @@ func (g *GoFakeS3) listBucketVersions(bucketName string, w http.ResponseWriter, 
 		page = ListBucketVersionsPage{}
 	}
 
-	bucket, err := g.versioned.ListBucketVersions(bucketName, &prefix, &page)
+	bucket, err := g.versioned.ListBucketVersions(r.Context(), bucketName, &prefix, &page)
 	if err != nil {
 		return err
 	}
@@ -427,7 +414,7 @@ func (g *GoFakeS3) createBucket(bucket string, w http.ResponseWriter, r *http.Re
 	if err := ValidateBucketName(bucket); err != nil {
 		return err
 	}
-	if err := g.storage.CreateBucket(bucket); err != nil {
+	if err := g.storage.CreateBucket(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -441,10 +428,10 @@ func (g *GoFakeS3) createBucket(bucket string, w http.ResponseWriter, r *http.Re
 func (g *GoFakeS3) deleteBucket(bucket string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "DELETE BUCKET:", bucket)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
-	if err := g.storage.DeleteBucket(bucket); err != nil {
+	if err := g.storage.DeleteBucket(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -457,14 +444,14 @@ func (g *GoFakeS3) headBucket(bucket string, w http.ResponseWriter, r *http.Requ
 	g.log.Print(LogInfo, "HEAD BUCKET", bucket)
 	g.log.Print(LogInfo, "bucketname:", bucket)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
 	// If autoBucket is not specified, ensureBucket is a no-op so we need to
 	// check manually.
 	if !g.autoBucket {
-		exists, err := g.storage.BucketExists(bucket)
+		exists, err := g.storage.BucketExists(r.Context(), bucket)
 		if err != nil {
 			return err
 		} else if !exists {
@@ -486,7 +473,7 @@ func (g *GoFakeS3) getObject(
 
 	g.log.Print(LogInfo, "GET OBJECT", "Bucket:", bucket, "Object:", object)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -499,7 +486,7 @@ func (g *GoFakeS3) getObject(
 
 	{ // get object from backend
 		if versionID == "" {
-			obj, err = g.storage.GetObject(bucket, object, rnge)
+			obj, err = g.storage.GetObject(r.Context(), bucket, object, rnge)
 			if err != nil {
 				return err
 			}
@@ -507,7 +494,7 @@ func (g *GoFakeS3) getObject(
 			if g.versioned == nil {
 				return ErrNotImplemented
 			}
-			obj, err = g.versioned.GetObjectVersion(bucket, object, versionID, rnge)
+			obj, err = g.versioned.GetObjectVersion(r.Context(), bucket, object, versionID, rnge)
 			if err != nil {
 				return err
 			}
@@ -582,11 +569,11 @@ func (g *GoFakeS3) headObject(
 
 	g.log.Print(LogInfo, "HEAD OBJECT", bucket, object)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
-	obj, err := g.storage.HeadObject(bucket, object)
+	obj, err := g.storage.HeadObject(r.Context(), bucket, object)
 	if err != nil {
 		return err
 	}
@@ -610,7 +597,7 @@ func (g *GoFakeS3) headObject(
 func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "CREATE OBJECT THROUGH BROWSER UPLOAD")
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -655,7 +642,7 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 		return err
 	}
 
-	result, err := g.storage.PutObject(bucket, key, meta, rdr, fileHeader.Size)
+	result, err := g.storage.PutObject(r.Context(), bucket, key, meta, rdr, fileHeader.Size)
 	if err != nil {
 		return err
 	}
@@ -671,7 +658,7 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r *http.Request) (err error) {
 	g.log.Print(LogInfo, "CREATE OBJECT:", bucket, object)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -716,7 +703,7 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 		return err
 	}
 
-	result, err := g.storage.PutObject(bucket, object, meta, rdr, size)
+	result, err := g.storage.PutObject(r.Context(), bucket, object, meta, rdr, size)
 	if err != nil {
 		return err
 	}
@@ -732,7 +719,7 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 
 // CopyObject copies an existing S3 object
 func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w http.ResponseWriter, r *http.Request) (err error) {
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -752,7 +739,7 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 	if err != nil {
 		return err
 	}
-	srcObj, err := g.storage.HeadObject(srcBucket, srcKey)
+	srcObj, err := g.storage.HeadObject(r.Context(), srcBucket, srcKey)
 	if err != nil {
 		return err
 	}
@@ -768,7 +755,7 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 		}
 	}
 
-	result, err := g.storage.CopyObject(srcBucket, srcKey, bucket, object, meta)
+	result, err := g.storage.CopyObject(r.Context(), srcBucket, srcKey, bucket, object, meta)
 	if err != nil {
 		return err
 	}
@@ -785,11 +772,11 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 
 func (g *GoFakeS3) deleteObject(bucket, object string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "DELETE:", bucket, object)
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
-	result, err := g.storage.DeleteObject(bucket, object)
+	result, err := g.storage.DeleteObject(r.Context(), bucket, object)
 	if err != nil {
 		return err
 	}
@@ -814,11 +801,11 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 	}
 
 	g.log.Print(LogInfo, "DELETE VERSION:", bucket, object, version)
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
-	result, err := g.versioned.DeleteObjectVersion(bucket, object, version)
+	result, err := g.versioned.DeleteObjectVersion(r.Context(), bucket, object, version)
 	if err != nil {
 		return err
 	}
@@ -843,7 +830,7 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "delete multi", bucket)
 
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -863,9 +850,9 @@ func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Req
 			keys[i] = o.Key
 		}
 
-		out, err = g.storage.DeleteMulti(bucket, keys...)
+		out, err = g.storage.DeleteMulti(r.Context(), bucket, keys...)
 	} else {
-		out, err = g.versioned.DeleteMultiVersions(bucket, in.Objects...)
+		out, err = g.versioned.DeleteMultiVersions(r.Context(), bucket, in.Objects...)
 	}
 
 	if err != nil {
@@ -886,11 +873,11 @@ func (g *GoFakeS3) initiateMultipartUpload(bucket, object string, w http.Respons
 	if err != nil {
 		return err
 	}
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
-	uploadID, err := g.uploader.CreateMultipartUpload(bucket, object, meta)
+	uploadID, err := g.uploader.CreateMultipartUpload(r.Context(), bucket, object, meta)
 	if err != nil {
 		return err
 	}
@@ -940,7 +927,7 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 		}
 	}
 
-	etag, err := g.uploader.UploadPart(bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
+	etag, err := g.uploader.UploadPart(r.Context(), bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
 	if err != nil {
 		return err
 	}
@@ -951,7 +938,7 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 
 func (g *GoFakeS3) abortMultipartUpload(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
 	g.log.Print(LogInfo, "abort multipart upload", bucket, object, uploadID)
-	if err := g.uploader.AbortMultipartUpload(bucket, object, uploadID); err != nil {
+	if err := g.uploader.AbortMultipartUpload(r.Context(), bucket, object, uploadID); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -966,7 +953,7 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		return err
 	}
 
-	versionID, etag, err := g.uploader.CompleteMultipartUpload(bucket, object, uploadID, &in)
+	versionID, etag, err := g.uploader.CompleteMultipartUpload(r.Context(), bucket, object, uploadID, &in)
 	if err != nil {
 		return err
 	}
@@ -983,7 +970,7 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 }
 
 func (g *GoFakeS3) listMultipartUploads(bucket string, w http.ResponseWriter, r *http.Request) error {
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -999,7 +986,7 @@ func (g *GoFakeS3) listMultipartUploads(bucket string, w http.ResponseWriter, r 
 		maxUploads = DefaultMaxUploads
 	}
 
-	out, err := g.uploader.ListMultipartUploads(bucket, marker, prefix, maxUploads)
+	out, err := g.uploader.ListMultipartUploads(r.Context(), bucket, marker, prefix, maxUploads)
 	if err != nil {
 		return err
 	}
@@ -1008,7 +995,7 @@ func (g *GoFakeS3) listMultipartUploads(bucket string, w http.ResponseWriter, r 
 }
 
 func (g *GoFakeS3) listMultipartUploadParts(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
-	if err := g.ensureBucketExists(bucket); err != nil {
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
 
@@ -1024,7 +1011,7 @@ func (g *GoFakeS3) listMultipartUploadParts(bucket, object string, uploadID Uplo
 		return ErrInvalidURI
 	}
 
-	out, err := g.uploader.ListParts(bucket, object, uploadID, int(marker), maxParts)
+	out, err := g.uploader.ListParts(r.Context(), bucket, object, uploadID, int(marker), maxParts)
 	if err != nil {
 		return err
 	}
@@ -1033,7 +1020,7 @@ func (g *GoFakeS3) listMultipartUploadParts(bucket, object string, uploadID Uplo
 }
 
 func (g *GoFakeS3) getBucketVersioning(bucket string, w http.ResponseWriter, r *http.Request) error {
-	if err := g.ensureBucketExists(bucket); err != nil { // S300007
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil { // S300007
 		return err
 	}
 
@@ -1041,7 +1028,7 @@ func (g *GoFakeS3) getBucketVersioning(bucket string, w http.ResponseWriter, r *
 
 	if g.versioned != nil {
 		var err error
-		config, err = g.versioned.VersioningConfiguration(bucket)
+		config, err = g.versioned.VersioningConfiguration(r.Context(), bucket)
 		if err != nil {
 			return err
 		}
@@ -1051,7 +1038,7 @@ func (g *GoFakeS3) getBucketVersioning(bucket string, w http.ResponseWriter, r *
 }
 
 func (g *GoFakeS3) putBucketVersioning(bucket string, w http.ResponseWriter, r *http.Request) error {
-	if err := g.ensureBucketExists(bucket); err != nil { // S300007
+	if err := g.ensureBucketExists(r.Context(), bucket); err != nil { // S300007
 		return err
 	}
 
@@ -1073,22 +1060,22 @@ func (g *GoFakeS3) putBucketVersioning(bucket string, w http.ResponseWriter, r *
 	}
 
 	g.log.Print(LogInfo, "PUT VERSIONING:", in.Status)
-	return g.versioned.SetVersioningConfiguration(bucket, in)
+	return g.versioned.SetVersioningConfiguration(r.Context(), bucket, in)
 }
 
-func (g *GoFakeS3) ensureBucketExists(bucket string) error {
+func (g *GoFakeS3) ensureBucketExists(ctx context.Context, bucket string) error {
 	if !g.autoBucket {
 		return nil // nothing to do
 	}
 
-	exists, err := g.storage.BucketExists(bucket)
+	exists, err := g.storage.BucketExists(ctx, bucket)
 	if err != nil {
 		return err
 	} else if exists {
 		return nil
 	}
 
-	if err := g.storage.CreateBucket(bucket); err != nil {
+	if err := g.storage.CreateBucket(ctx, bucket); err != nil {
 		g.log.Print(LogErr, "autobucket create failed:", err)
 		return ResourceError(ErrNoSuchBucket, bucket)
 	}

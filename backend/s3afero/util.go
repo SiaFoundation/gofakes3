@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SiaFoundation/gofakes3"
 	"github.com/spf13/afero"
+	"go.sia.tech/gofakes3"
 )
 
 var emptyPrefix = &gofakes3.Prefix{}

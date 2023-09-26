@@ -2,15 +2,16 @@ package s3bolt
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/s3io"
 	bolt "go.etcd.io/bbolt"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/s3io"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -84,7 +85,7 @@ func (db *Backend) metaBucket(tx *bolt.Tx) (*metaBucket, error) {
 	}, nil
 }
 
-func (db *Backend) ListBuckets() ([]gofakes3.BucketInfo, error) {
+func (db *Backend) ListBuckets(_ context.Context) ([]gofakes3.BucketInfo, error) {
 	var buckets []gofakes3.BucketInfo
 
 	err := db.bolt.View(func(tx *bolt.Tx) error {
@@ -130,7 +131,7 @@ func (db *Backend) ListBuckets() ([]gofakes3.BucketInfo, error) {
 	return buckets, err
 }
 
-func (db *Backend) ListBucket(name string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
+func (db *Backend) ListBucket(_ context.Context, name string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
 	if prefix == nil {
 		prefix = emptyPrefix
 	}
@@ -179,7 +180,7 @@ func (db *Backend) ListBucket(name string, prefix *gofakes3.Prefix, page gofakes
 	return objects, err
 }
 
-func (db *Backend) CreateBucket(name string) error {
+func (db *Backend) CreateBucket(_ context.Context, name string) error {
 	return db.bolt.Update(func(tx *bolt.Tx) error {
 		{ // create bucket metadata
 			metaBucket, err := db.metaBucket(tx)
@@ -204,7 +205,7 @@ func (db *Backend) CreateBucket(name string) error {
 	})
 }
 
-func (db *Backend) DeleteBucket(name string) error {
+func (db *Backend) DeleteBucket(_ context.Context, name string) error {
 	nameBts := []byte(name)
 
 	if bytes.Equal(nameBts, db.metaBucketName) {
@@ -243,7 +244,7 @@ func (db *Backend) DeleteBucket(name string) error {
 	})
 }
 
-func (db *Backend) BucketExists(name string) (exists bool, err error) {
+func (db *Backend) BucketExists(_ context.Context, name string) (exists bool, err error) {
 	err = db.bolt.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(name))
 		exists = b != nil
@@ -252,8 +253,8 @@ func (db *Backend) BucketExists(name string) (exists bool, err error) {
 	return exists, err
 }
 
-func (db *Backend) HeadObject(bucketName, objectName string) (*gofakes3.Object, error) {
-	obj, err := db.GetObject(bucketName, objectName, nil)
+func (db *Backend) HeadObject(ctx context.Context, bucketName, objectName string) (*gofakes3.Object, error) {
+	obj, err := db.GetObject(ctx, bucketName, objectName, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +262,7 @@ func (db *Backend) HeadObject(bucketName, objectName string) (*gofakes3.Object, 
 	return obj, nil
 }
 
-func (db *Backend) GetObject(bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (*gofakes3.Object, error) {
+func (db *Backend) GetObject(_ context.Context, bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (*gofakes3.Object, error) {
 	var t boltObject
 
 	err := db.bolt.View(func(tx *bolt.Tx) error {
@@ -292,6 +293,7 @@ func (db *Backend) GetObject(bucketName, objectName string, rangeRequest *gofake
 }
 
 func (db *Backend) PutObject(
+	ctx context.Context,
 	bucketName, objectName string,
 	meta map[string]string,
 	input io.Reader, size int64,
@@ -302,7 +304,7 @@ func (db *Backend) PutObject(
 		return result, err
 	}
 
-	err = gofakes3.MergeMetadata(db, bucketName, objectName, meta)
+	err = gofakes3.MergeMetadata(ctx, db, bucketName, objectName, meta)
 	if err != nil {
 		return result, err
 	}
@@ -334,11 +336,11 @@ func (db *Backend) PutObject(
 	})
 }
 
-func (db *Backend) CopyObject(srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
-	return gofakes3.CopyObject(db, srcBucket, srcKey, dstBucket, dstKey, meta)
+func (db *Backend) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
+	return gofakes3.CopyObject(ctx, db, srcBucket, srcKey, dstBucket, dstKey, meta)
 }
 
-func (db *Backend) DeleteObject(bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
+func (db *Backend) DeleteObject(_ context.Context, bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
 	return result, db.bolt.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketName))
 		if b == nil {
@@ -351,7 +353,7 @@ func (db *Backend) DeleteObject(bucketName, objectName string) (result gofakes3.
 	})
 }
 
-func (db *Backend) DeleteMulti(bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, err error) {
+func (db *Backend) DeleteMulti(_ context.Context, bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, err error) {
 	err = db.bolt.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketName))
 		if b == nil {

@@ -5,9 +5,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/s3io"
 	"github.com/ryszard/goskiplist/skiplist"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/s3io"
 )
 
 type versionGenFunc func() gofakes3.VersionID

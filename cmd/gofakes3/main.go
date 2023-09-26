@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"expvar"
 	"flag"
 	"fmt"
@@ -13,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/backend/s3afero"
-	"github.com/SiaFoundation/gofakes3/backend/s3bolt"
-	"github.com/SiaFoundation/gofakes3/backend/s3mem"
 	"github.com/spf13/afero"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/backend/s3afero"
+	"go.sia.tech/gofakes3/backend/s3bolt"
+	"go.sia.tech/gofakes3/backend/s3mem"
 )
 
 const usage = `
@@ -250,7 +251,7 @@ func run() error {
 	}
 
 	if values.initialBucket != "" {
-		if err := backend.CreateBucket(values.initialBucket); err != nil && !gofakes3.IsAlreadyExists(err) {
+		if err := backend.CreateBucket(context.Background(), values.initialBucket); err != nil && !gofakes3.IsAlreadyExists(err) {
 			return fmt.Errorf("gofakes3: could not create initial bucket %q: %v", values.initialBucket, err)
 		}
 		log.Println("created -initialbucket", values.initialBucket)

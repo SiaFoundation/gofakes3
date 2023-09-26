@@ -1,13 +1,14 @@
 package s3mem
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"io"
 	"sync"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/goskipiter"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/goskipiter"
 )
 
 var (
@@ -58,7 +59,7 @@ func New(opts ...Option) *Backend {
 	return b
 }
 
-func (db *Backend) ListBuckets() ([]gofakes3.BucketInfo, error) {
+func (db *Backend) ListBuckets(_ context.Context) ([]gofakes3.BucketInfo, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
@@ -73,7 +74,7 @@ func (db *Backend) ListBuckets() ([]gofakes3.BucketInfo, error) {
 	return buckets, nil
 }
 
-func (db *Backend) ListBucket(name string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
+func (db *Backend) ListBucket(_ context.Context, name string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
 	if prefix == nil {
 		prefix = emptyPrefix
 	}
@@ -133,7 +134,7 @@ func (db *Backend) ListBucket(name string, prefix *gofakes3.Prefix, page gofakes
 	return response, nil
 }
 
-func (db *Backend) CreateBucket(name string) error {
+func (db *Backend) CreateBucket(_ context.Context, name string) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -145,7 +146,7 @@ func (db *Backend) CreateBucket(name string) error {
 	return nil
 }
 
-func (db *Backend) DeleteBucket(name string) error {
+func (db *Backend) DeleteBucket(_ context.Context, name string) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -162,13 +163,13 @@ func (db *Backend) DeleteBucket(name string) error {
 	return nil
 }
 
-func (db *Backend) BucketExists(name string) (exists bool, err error) {
+func (db *Backend) BucketExists(_ context.Context, name string) (exists bool, err error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 	return db.buckets[name] != nil, nil
 }
 
-func (db *Backend) HeadObject(bucketName, objectName string) (*gofakes3.Object, error) {
+func (db *Backend) HeadObject(_ context.Context, bucketName, objectName string) (*gofakes3.Object, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
@@ -185,7 +186,7 @@ func (db *Backend) HeadObject(bucketName, objectName string) (*gofakes3.Object, 
 	return obj.data.toObject(nil, false)
 }
 
-func (db *Backend) GetObject(bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (*gofakes3.Object, error) {
+func (db *Backend) GetObject(_ context.Context, bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (*gofakes3.Object, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
@@ -217,7 +218,7 @@ func (db *Backend) GetObject(bucketName, objectName string, rangeRequest *gofake
 	return result, nil
 }
 
-func (db *Backend) PutObject(bucketName, objectName string, meta map[string]string, input io.Reader, size int64) (result gofakes3.PutObjectResult, err error) {
+func (db *Backend) PutObject(ctx context.Context, bucketName, objectName string, meta map[string]string, input io.Reader, size int64) (result gofakes3.PutObjectResult, err error) {
 	// No need to lock the backend while we read the data into memory; it holds
 	// the write lock open unnecessarily, and could be blocked for an unreasonably
 	// long time by a connection timing out:
@@ -226,7 +227,7 @@ func (db *Backend) PutObject(bucketName, objectName string, meta map[string]stri
 		return result, err
 	}
 
-	err = gofakes3.MergeMetadata(db, bucketName, objectName, meta)
+	err = gofakes3.MergeMetadata(ctx, db, bucketName, objectName, meta)
 	if err != nil {
 		return result, err
 	}
@@ -260,11 +261,11 @@ func (db *Backend) PutObject(bucketName, objectName string, meta map[string]stri
 	return result, nil
 }
 
-func (db *Backend) CopyObject(srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
-	return gofakes3.CopyObject(db, srcBucket, srcKey, dstBucket, dstKey, meta)
+func (db *Backend) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
+	return gofakes3.CopyObject(ctx, db, srcBucket, srcKey, dstBucket, dstKey, meta)
 }
 
-func (db *Backend) DeleteObject(bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
+func (db *Backend) DeleteObject(_ context.Context, bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -276,7 +277,7 @@ func (db *Backend) DeleteObject(bucketName, objectName string) (result gofakes3.
 	return bucket.rm(objectName, db.timeSource.Now())
 }
 
-func (db *Backend) DeleteMulti(bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, err error) {
+func (db *Backend) DeleteMulti(_ context.Context, bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, err error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -309,7 +310,7 @@ func (db *Backend) DeleteMulti(bucketName string, objects ...string) (result gof
 	return result, nil
 }
 
-func (db *Backend) DeleteMultiVersions(bucketName string, objects ...gofakes3.ObjectID) (result gofakes3.MultiDeleteResult, err error) {
+func (db *Backend) DeleteMultiVersions(_ context.Context, bucketName string, objects ...gofakes3.ObjectID) (result gofakes3.MultiDeleteResult, err error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -346,7 +347,7 @@ func (db *Backend) DeleteMultiVersions(bucketName string, objects ...gofakes3.Ob
 	return result, nil
 }
 
-func (db *Backend) VersioningConfiguration(bucketName string) (versioning gofakes3.VersioningConfiguration, rerr error) {
+func (db *Backend) VersioningConfiguration(_ context.Context, bucketName string) (versioning gofakes3.VersioningConfiguration, rerr error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
@@ -360,7 +361,7 @@ func (db *Backend) VersioningConfiguration(bucketName string) (versioning gofake
 	return versioning, nil
 }
 
-func (db *Backend) SetVersioningConfiguration(bucketName string, v gofakes3.VersioningConfiguration) error {
+func (db *Backend) SetVersioningConfiguration(_ context.Context, bucketName string, v gofakes3.VersioningConfiguration) error {
 	if v.MFADelete.Enabled() {
 		return gofakes3.ErrNotImplemented
 	}
@@ -379,11 +380,12 @@ func (db *Backend) SetVersioningConfiguration(bucketName string, v gofakes3.Vers
 }
 
 func (db *Backend) GetObjectVersion(
+	ctx context.Context,
 	bucketName, objectName string,
 	versionID gofakes3.VersionID,
 	rangeRequest *gofakes3.ObjectRangeRequest) (*gofakes3.Object, error) {
 	if versionID == "" {
-		return db.GetObject(bucketName, objectName, rangeRequest)
+		return db.GetObject(ctx, bucketName, objectName, rangeRequest)
 	}
 
 	db.lock.RLock()
@@ -402,9 +404,9 @@ func (db *Backend) GetObjectVersion(
 	return ver.toObject(rangeRequest, true)
 }
 
-func (db *Backend) HeadObjectVersion(bucketName, objectName string, versionID gofakes3.VersionID) (*gofakes3.Object, error) {
+func (db *Backend) HeadObjectVersion(ctx context.Context, bucketName, objectName string, versionID gofakes3.VersionID) (*gofakes3.Object, error) {
 	if versionID == "" {
-		return db.HeadObject(bucketName, objectName)
+		return db.HeadObject(ctx, bucketName, objectName)
 	}
 
 	db.lock.RLock()
@@ -423,7 +425,7 @@ func (db *Backend) HeadObjectVersion(bucketName, objectName string, versionID go
 	return ver.toObject(nil, false)
 }
 
-func (db *Backend) DeleteObjectVersion(bucketName, objectName string, versionID gofakes3.VersionID) (result gofakes3.ObjectDeleteResult, rerr error) {
+func (db *Backend) DeleteObjectVersion(ctx context.Context, bucketName, objectName string, versionID gofakes3.VersionID) (result gofakes3.ObjectDeleteResult, rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -436,6 +438,7 @@ func (db *Backend) DeleteObjectVersion(bucketName, objectName string, versionID 
 }
 
 func (db *Backend) ListBucketVersions(
+	ctx context.Context,
 	bucketName string,
 	prefix *gofakes3.Prefix,
 	page *gofakes3.ListBucketVersionsPage,

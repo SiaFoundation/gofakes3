@@ -1,6 +1,7 @@
 package s3afero
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -12,9 +13,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SiaFoundation/gofakes3"
-	"github.com/SiaFoundation/gofakes3/internal/s3io"
 	"github.com/spf13/afero"
+	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/internal/s3io"
 )
 
 // MultiBucketBackend is a gofakes3.Backend that allows you to create multiple
@@ -76,7 +77,7 @@ func MultiBucket(fs afero.Fs, opts ...MultiOption) (*MultiBucketBackend, error) 
 	return b, nil
 }
 
-func (db *MultiBucketBackend) ListBuckets() ([]gofakes3.BucketInfo, error) {
+func (db *MultiBucketBackend) ListBuckets(_ context.Context) ([]gofakes3.BucketInfo, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -106,7 +107,7 @@ func (db *MultiBucketBackend) ListBuckets() ([]gofakes3.BucketInfo, error) {
 	return buckets, nil
 }
 
-func (db *MultiBucketBackend) ListBucket(bucket string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
+func (db *MultiBucketBackend) ListBucket(_ context.Context, bucket string, prefix *gofakes3.Prefix, page gofakes3.ListBucketPage) (*gofakes3.ObjectList, error) {
 	if prefix == nil {
 		prefix = emptyPrefix
 	}
@@ -225,7 +226,7 @@ func (db *MultiBucketBackend) getBucketWithArbitraryPrefixLocked(bucket string, 
 	return response, nil
 }
 
-func (db *MultiBucketBackend) CreateBucket(name string) error {
+func (db *MultiBucketBackend) CreateBucket(_ context.Context, name string) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -241,7 +242,7 @@ func (db *MultiBucketBackend) CreateBucket(name string) error {
 	}
 }
 
-func (db *MultiBucketBackend) DeleteBucket(name string) (rerr error) {
+func (db *MultiBucketBackend) DeleteBucket(_ context.Context, name string) (rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -276,14 +277,14 @@ func (db *MultiBucketBackend) DeleteBucket(name string) (rerr error) {
 	return rerr
 }
 
-func (db *MultiBucketBackend) BucketExists(name string) (exists bool, err error) {
+func (db *MultiBucketBackend) BucketExists(_ context.Context, name string) (exists bool, err error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 	exists, err = afero.Exists(db.bucketFs, name)
 	return
 }
 
-func (db *MultiBucketBackend) HeadObject(bucketName, objectName string) (*gofakes3.Object, error) {
+func (db *MultiBucketBackend) HeadObject(_ context.Context, bucketName, objectName string) (*gofakes3.Object, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -322,7 +323,7 @@ func (db *MultiBucketBackend) HeadObject(bucketName, objectName string) (*gofake
 	}, nil
 }
 
-func (db *MultiBucketBackend) GetObject(bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (obj *gofakes3.Object, rerr error) {
+func (db *MultiBucketBackend) GetObject(_ context.Context, bucketName, objectName string, rangeRequest *gofakes3.ObjectRangeRequest) (obj *gofakes3.Object, rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -387,12 +388,13 @@ func (db *MultiBucketBackend) GetObject(bucketName, objectName string, rangeRequ
 }
 
 func (db *MultiBucketBackend) PutObject(
+	ctx context.Context,
 	bucketName, objectName string,
 	meta map[string]string,
 	input io.Reader, size int64,
 ) (result gofakes3.PutObjectResult, err error) {
 
-	err = gofakes3.MergeMetadata(db, bucketName, objectName, meta)
+	err = gofakes3.MergeMetadata(ctx, db, bucketName, objectName, meta)
 	if err != nil {
 		return result, err
 	}
@@ -464,11 +466,11 @@ func (db *MultiBucketBackend) PutObject(
 	return result, nil
 }
 
-func (db *MultiBucketBackend) CopyObject(srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
-	return gofakes3.CopyObject(db, srcBucket, srcKey, dstBucket, dstKey, meta)
+func (db *MultiBucketBackend) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string, meta map[string]string) (result gofakes3.CopyObjectResult, err error) {
+	return gofakes3.CopyObject(ctx, db, srcBucket, srcKey, dstBucket, dstKey, meta)
 }
 
-func (db *MultiBucketBackend) DeleteObject(bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
+func (db *MultiBucketBackend) DeleteObject(_ context.Context, bucketName, objectName string) (result gofakes3.ObjectDeleteResult, rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -499,7 +501,7 @@ func (db *MultiBucketBackend) deleteObjectLocked(bucketName, objectName string) 
 	return nil
 }
 
-func (db *MultiBucketBackend) DeleteMulti(bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, rerr error) {
+func (db *MultiBucketBackend) DeleteMulti(_ context.Context, bucketName string, objects ...string) (result gofakes3.MultiDeleteResult, rerr error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
