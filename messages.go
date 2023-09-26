@@ -69,7 +69,7 @@ func (c CompleteMultipartUploadRequest) partIDs() []int {
 	return inParts
 }
 
-type CompleteMultipartUploadResult struct {
+type CompleteMultipartUploadResponse struct {
 	Location string `xml:"Location"`
 	Bucket   string `xml:"Bucket"`
 	Key      string `xml:"Key"`
@@ -369,7 +369,7 @@ type UploadPartResult struct {
 	ETag string `xml:"ETag,omitempty"`
 }
 
-type CompleteMultipartResult struct {
+type CompleteMultipartUploadResult struct {
 	// If versioning is enabled on the bucket, this should be set to the
 	// created version ID. If versioning is not enabled, this should be
 	// empty.

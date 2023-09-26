@@ -788,9 +788,12 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 	if srcObj.VersionID != "" {
 		w.Header().Set("x-amz-version-id", string(srcObj.VersionID))
 	}
-	if result.ETag != "" {
-		w.Header().Set("ETag", result.ETag)
+
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(hex.EncodeToString(srcObj.Hash))
 	}
+	w.Header().Set("ETag", etag)
 
 	return g.xmlEncoder(w).Encode(result)
 }
@@ -987,7 +990,7 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		w.Header().Set("x-amz-version-id", string(res.VersionID))
 	}
 
-	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResult{
+	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResponse{
 		ETag:   res.ETag,
 		Bucket: bucket,
 		Key:    object,

@@ -403,7 +403,7 @@ func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int
 	return &UploadPartResult{ETag: formatETag(etag)}, nil
 }
 
-func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartResult, error) {
+func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
 		return nil, err
@@ -457,7 +457,7 @@ func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, i
 
 	// if getUnlocked succeeded, so will this:
 	u.buckets[bucket].remove(id)
-	return &CompleteMultipartResult{
+	return &CompleteMultipartUploadResult{
 		VersionID: result.VersionID,
 		ETag:      etag,
 	}, nil

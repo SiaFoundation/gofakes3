@@ -318,7 +318,7 @@ type MultipartBackend interface {
 	ListParts(bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error)
 
 	AbortMultipartUpload(bucket, object string, id UploadID) error
-	CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartResult, error)
+	CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error)
 }
 
 // CopyObject is a helper function useful for quickly implementing CopyObject on
