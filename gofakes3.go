@@ -725,7 +725,12 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 		g.log.Print(LogInfo, "CREATED VERSION:", bucket, object, result.VersionID)
 		w.Header().Set("x-amz-version-id", string(result.VersionID))
 	}
-	w.Header().Set("ETag", `"`+hex.EncodeToString(rdr.Sum(nil))+`"`)
+
+	etag := result.ETag
+	if etag == "" {
+		etag = hex.EncodeToString(rdr.Sum(nil))
+	}
+	w.Header().Set("ETag", fmt.Sprintf("\"%s\"", etag))
 
 	return nil
 }
