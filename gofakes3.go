@@ -663,7 +663,11 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 		w.Header().Set("x-amz-version-id", string(result.VersionID))
 	}
 
-	w.Header().Set("ETag", `"`+hex.EncodeToString(rdr.Sum(nil))+`"`)
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(hex.EncodeToString(rdr.Sum(nil)))
+	}
+	w.Header().Set("ETag", etag)
 	return nil
 }
 
@@ -728,9 +732,9 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 
 	etag := result.ETag
 	if etag == "" {
-		etag = hex.EncodeToString(rdr.Sum(nil))
+		etag = formatETag(hex.EncodeToString(rdr.Sum(nil)))
 	}
-	w.Header().Set("ETag", fmt.Sprintf("\"%s\"", etag))
+	w.Header().Set("ETag", etag)
 
 	return nil
 }
@@ -953,7 +957,7 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 		return err
 	}
 
-	w.Header().Add("ETag", etag)
+	w.Header().Add("ETag", formatETag(etag))
 	return nil
 }
 
@@ -974,17 +978,17 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		return err
 	}
 
-	versionID, etag, err := g.uploader.CompleteMultipartUpload(bucket, object, uploadID, &in)
+	res, err := g.uploader.CompleteMultipartUpload(bucket, object, uploadID, &in)
 	if err != nil {
 		return err
 	}
 
-	if versionID != "" {
-		w.Header().Set("x-amz-version-id", string(versionID))
+	if res.VersionID != "" {
+		w.Header().Set("x-amz-version-id", string(res.VersionID))
 	}
 
 	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResult{
-		ETag:   etag,
+		ETag:   res.ETag,
 		Bucket: bucket,
 		Key:    object,
 	})
@@ -1209,4 +1213,8 @@ func listBucketVersionsPageFromQuery(query url.Values) (page ListBucketVersionsP
 	_, page.HasVersionIDMarker = query["version-id-marker"]
 
 	return page, nil
+}
+
+func formatETag(etag string) string {
+	return fmt.Sprintf("\"%s\"", etag)
 }

@@ -365,6 +365,20 @@ func (b *ListBucketVersionsResult) AddPrefix(prefix string) {
 	b.CommonPrefixes = append(b.CommonPrefixes, CommonPrefix{Prefix: prefix})
 }
 
+type UploadPartResult struct {
+	ETag string `xml:"ETag,omitempty"`
+}
+
+type CompleteMultipartResult struct {
+	// If versioning is enabled on the bucket, this should be set to the
+	// created version ID. If versioning is not enabled, this should be
+	// empty.
+	VersionID VersionID `xml:"VersionId,omitempty"`
+
+	// ETag is the value of the ETag header returned by the backend.
+	ETag string `xml:"ETag,omitempty"`
+}
+
 type ListMultipartUploadsResult struct {
 	Bucket string `xml:"Bucket"`
 
@@ -428,6 +442,17 @@ type ListMultipartUploadPartItem struct {
 	LastModified ContentTime `xml:"LastModified,omitempty"`
 	ETag         string      `xml:"ETag,omitempty"`
 	Size         int64       `xml:"Size"`
+}
+
+// PutObjectResult contains the response from a PutObject operation.
+type PutObjectResult struct {
+	// If versioning is enabled on the bucket, this should be set to the
+	// created version ID. If versioning is not enabled, this should be
+	// empty.
+	VersionID VersionID `xml:"VersionId,omitempty"`
+
+	// ETag is the value of the ETag header returned by the backend.
+	ETag string `xml:"ETag,omitempty"`
 }
 
 // CopyObjectResult contains the response from a CopyObject operation.

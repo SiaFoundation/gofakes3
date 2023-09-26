@@ -1,7 +1,6 @@
 package gofakes3
 
 import (
-	"encoding/hex"
 	"io"
 	"time"
 
@@ -118,17 +117,6 @@ type ListBucketPage struct {
 
 func (p ListBucketPage) IsEmpty() bool {
 	return p == ListBucketPage{}
-}
-
-type PutObjectResult struct {
-	// If versioning is enabled on the bucket, this should be set to the
-	// created version ID. If versioning is not enabled, this should be
-	// empty.
-	VersionID VersionID
-
-	// ETag is the value of the ETag header returned by the backend, stripped of
-	// its quotation marks.
-	ETag string
 }
 
 // Backend provides a set of operations to be implemented in order to support
@@ -324,13 +312,13 @@ type VersionedBackend interface {
 // gets finalised and pushed to the backend.
 type MultipartBackend interface {
 	CreateMultipartUpload(bucket, object string, meta map[string]string) (UploadID, error)
-	UploadPart(bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error)
+	UploadPart(bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (*UploadPartResult, error)
 
 	ListMultipartUploads(bucket string, marker *UploadListMarker, prefix Prefix, limit int64) (*ListMultipartUploadsResult, error)
 	ListParts(bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error)
 
 	AbortMultipartUpload(bucket, object string, id UploadID) error
-	CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (versionID VersionID, etag string, err error)
+	CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartResult, error)
 }
 
 // CopyObject is a helper function useful for quickly implementing CopyObject on
@@ -343,13 +331,13 @@ func CopyObject(db Backend, srcBucket, srcKey, dstBucket, dstKey string, meta ma
 	}
 	defer c.Contents.Close()
 
-	_, err = db.PutObject(dstBucket, dstKey, meta, c.Contents, c.Size)
+	res, err := db.PutObject(dstBucket, dstKey, meta, c.Contents, c.Size)
 	if err != nil {
 		return
 	}
 
 	return CopyObjectResult{
-		ETag:         `"` + hex.EncodeToString(c.Hash) + `"`,
+		ETag:         res.ETag,
 		LastModified: NewContentTime(time.Now()),
 	}, nil
 }
