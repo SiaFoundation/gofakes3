@@ -258,6 +258,7 @@ func (db *Backend) PutObject(ctx context.Context, bucketName, objectName string,
 		result.VersionID = item.versionID
 	}
 
+	result.ETag = item.etag
 	return result, nil
 }
 

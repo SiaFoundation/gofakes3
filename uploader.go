@@ -368,17 +368,17 @@ func (u *uploader) AbortMultipartUpload(_ context.Context, bucket, object string
 	return nil
 }
 
-func (u *uploader) UploadPart(_ context.Context, bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error) {
+func (u *uploader) UploadPart(_ context.Context, bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (*UploadPartResult, error) {
 	body, err := io.ReadAll(input)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(body) != int(contentLength) {
-		return "", ErrIncompleteBody
+		return nil, ErrIncompleteBody
 	}
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	mpu.mu.Lock()
@@ -388,7 +388,7 @@ func (u *uploader) UploadPart(_ context.Context, bucket, object string, id Uploa
 	// from guaranteed unique input:
 	hash := md5.New()
 	hash.Write([]byte(body))
-	etag = fmt.Sprintf(`"%s"`, hex.EncodeToString(hash.Sum(nil)))
+	etag := formatETag(hex.EncodeToString(hash.Sum(nil)))
 
 	part := multipartUploadPart{
 		PartNumber:   partNumber,
@@ -400,13 +400,14 @@ func (u *uploader) UploadPart(_ context.Context, bucket, object string, id Uploa
 		mpu.parts = append(mpu.parts, make([]*multipartUploadPart, partNumber-len(mpu.parts)+1)...)
 	}
 	mpu.parts[partNumber] = &part
-	return etag, nil
+
+	return &UploadPartResult{ETag: etag}, nil
 }
 
-func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (version VersionID, etag string, err error) {
+func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	mpu.mu.Lock()
@@ -418,23 +419,23 @@ func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object s
 	// end up uploading more parts than you need to assemble, so it should
 	// probably just ignore that?
 	if len(input.Parts) > mpuPartsLen {
-		return "", "", ErrInvalidPart
+		return nil, ErrInvalidPart
 	}
 
 	if !input.partsAreSorted() {
-		return "", "", ErrInvalidPartOrder
+		return nil, ErrInvalidPartOrder
 	}
 
 	var size int64
 
 	for _, inPart := range input.Parts {
 		if inPart.PartNumber >= mpuPartsLen || mpu.parts[inPart.PartNumber] == nil {
-			return "", "", ErrorMessagef(ErrInvalidPart, "unexpected part number %d in complete request", inPart.PartNumber)
+			return nil, ErrorMessagef(ErrInvalidPart, "unexpected part number %d in complete request", inPart.PartNumber)
 		}
 
 		upPart := mpu.parts[inPart.PartNumber]
 		if strings.Trim(inPart.ETag, "\"") != strings.Trim(upPart.ETag, "\"") {
-			return "", "", ErrorMessagef(ErrInvalidPart, "unexpected part etag for number %d in complete request", inPart.PartNumber)
+			return nil, ErrorMessagef(ErrInvalidPart, "unexpected part etag for number %d in complete request", inPart.PartNumber)
 		}
 
 		size += int64(len(upPart.Body))
@@ -445,16 +446,22 @@ func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object s
 		body = append(body, mpu.parts[part.PartNumber].Body...)
 	}
 
-	hash := fmt.Sprintf("%x", md5.Sum(body))
-
 	result, err := u.storage.PutObject(ctx, bucket, object, mpu.Meta, bytes.NewReader(body), int64(len(body)))
 	if err != nil {
-		return "", "", err
+		return nil, err
+	}
+
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(fmt.Sprintf("%x", md5.Sum(body)))
 	}
 
 	// if getUnlocked succeeded, so will this:
 	u.buckets[bucket].remove(id)
-	return result.VersionID, hash, nil
+	return &CompleteMultipartUploadResult{
+		VersionID: result.VersionID,
+		ETag:      etag,
+	}, nil
 }
 
 func (u *uploader) getUnlocked(bucket, object string, id UploadID) (mu *multipartUpload, err error) {

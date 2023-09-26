@@ -650,7 +650,11 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 		w.Header().Set("x-amz-version-id", string(result.VersionID))
 	}
 
-	w.Header().Set("ETag", `"`+hex.EncodeToString(rdr.Sum(nil))+`"`)
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(hex.EncodeToString(rdr.Sum(nil)))
+	}
+	w.Header().Set("ETag", etag)
 	return nil
 }
 
@@ -712,7 +716,12 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 		g.log.Print(LogInfo, "CREATED VERSION:", bucket, object, result.VersionID)
 		w.Header().Set("x-amz-version-id", string(result.VersionID))
 	}
-	w.Header().Set("ETag", `"`+hex.EncodeToString(rdr.Sum(nil))+`"`)
+
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(hex.EncodeToString(rdr.Sum(nil)))
+	}
+	w.Header().Set("ETag", etag)
 
 	return nil
 }
@@ -766,6 +775,12 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 	if srcObj.VersionID != "" {
 		w.Header().Set("x-amz-version-id", string(srcObj.VersionID))
 	}
+
+	etag := result.ETag
+	if etag == "" {
+		etag = formatETag(hex.EncodeToString(srcObj.Hash))
+	}
+	w.Header().Set("ETag", etag)
 
 	return g.xmlEncoder(w).Encode(result)
 }
@@ -927,12 +942,12 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 		}
 	}
 
-	etag, err := g.uploader.UploadPart(r.Context(), bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
+	res, err := g.uploader.UploadPart(r.Context(), bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
 	if err != nil {
 		return err
 	}
 
-	w.Header().Add("ETag", etag)
+	w.Header().Add("ETag", res.ETag)
 	return nil
 }
 
@@ -953,17 +968,17 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		return err
 	}
 
-	versionID, etag, err := g.uploader.CompleteMultipartUpload(r.Context(), bucket, object, uploadID, &in)
+	res, err := g.uploader.CompleteMultipartUpload(r.Context(), bucket, object, uploadID, &in)
 	if err != nil {
 		return err
 	}
 
-	if versionID != "" {
-		w.Header().Set("x-amz-version-id", string(versionID))
+	if res.VersionID != "" {
+		w.Header().Set("x-amz-version-id", string(res.VersionID))
 	}
 
-	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResult{
-		ETag:   etag,
+	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResponse{
+		ETag:   res.ETag,
 		Bucket: bucket,
 		Key:    object,
 	})
@@ -1188,4 +1203,8 @@ func listBucketVersionsPageFromQuery(query url.Values) (page ListBucketVersionsP
 	_, page.HasVersionIDMarker = query["version-id-marker"]
 
 	return page, nil
+}
+
+func formatETag(etag string) string {
+	return fmt.Sprintf("\"%s\"", etag)
 }

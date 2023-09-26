@@ -2,7 +2,6 @@ package gofakes3
 
 import (
 	"context"
-	"encoding/hex"
 	"io"
 	"net/http"
 	"time"
@@ -120,13 +119,6 @@ type ListBucketPage struct {
 
 func (p ListBucketPage) IsEmpty() bool {
 	return p == ListBucketPage{}
-}
-
-type PutObjectResult struct {
-	// If versioning is enabled on the bucket, this should be set to the
-	// created version ID. If versioning is not enabled, this should be
-	// empty.
-	VersionID VersionID
 }
 
 // Backend provides a set of operations to be implemented in order to support
@@ -323,13 +315,13 @@ type VersionedBackend interface {
 // gets finalised and pushed to the backend.
 type MultipartBackend interface {
 	CreateMultipartUpload(ctx context.Context, bucket, object string, meta map[string]string) (UploadID, error)
-	UploadPart(ctx context.Context, bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (etag string, err error)
+	UploadPart(ctx context.Context, bucket, object string, id UploadID, partNumber int, contentLength int64, input io.Reader) (*UploadPartResult, error)
 
 	ListMultipartUploads(ctx context.Context, bucket string, marker *UploadListMarker, prefix Prefix, limit int64) (*ListMultipartUploadsResult, error)
 	ListParts(ctx context.Context, bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error)
 
 	AbortMultipartUpload(ctx context.Context, bucket, object string, id UploadID) error
-	CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (versionID VersionID, etag string, err error)
+	CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error)
 }
 
 type AuthenticatedBackend interface {
@@ -346,13 +338,13 @@ func CopyObject(ctx context.Context, db Backend, srcBucket, srcKey, dstBucket, d
 	}
 	defer c.Contents.Close()
 
-	_, err = db.PutObject(ctx, dstBucket, dstKey, meta, c.Contents, c.Size)
+	res, err := db.PutObject(ctx, dstBucket, dstKey, meta, c.Contents, c.Size)
 	if err != nil {
 		return
 	}
 
 	return CopyObjectResult{
-		ETag:         `"` + hex.EncodeToString(c.Hash) + `"`,
+		ETag:         res.ETag,
 		LastModified: NewContentTime(time.Now()),
 	}, nil
 }
