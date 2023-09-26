@@ -257,6 +257,7 @@ func (db *Backend) PutObject(bucketName, objectName string, meta map[string]stri
 		result.VersionID = item.versionID
 	}
 
+	result.ETag = item.etag
 	return result, nil
 }
 
