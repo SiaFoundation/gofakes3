@@ -779,6 +779,9 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 	if srcObj.VersionID != "" {
 		w.Header().Set("x-amz-version-id", string(srcObj.VersionID))
 	}
+	if result.ETag != "" {
+		w.Header().Set("ETag", result.ETag)
+	}
 
 	return g.xmlEncoder(w).Encode(result)
 }
