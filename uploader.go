@@ -387,7 +387,7 @@ func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int
 	// from guaranteed unique input:
 	hash := md5.New()
 	hash.Write([]byte(body))
-	etag := fmt.Sprintf(`"%s"`, hex.EncodeToString(hash.Sum(nil)))
+	etag := formatETag(hex.EncodeToString(hash.Sum(nil)))
 
 	part := multipartUploadPart{
 		PartNumber:   partNumber,
@@ -400,7 +400,7 @@ func (u *uploader) UploadPart(bucket, object string, id UploadID, partNumber int
 	}
 	mpu.parts[partNumber] = &part
 
-	return &UploadPartResult{ETag: formatETag(etag)}, nil
+	return &UploadPartResult{ETag: etag}, nil
 }
 
 func (u *uploader) CompleteMultipartUpload(bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
