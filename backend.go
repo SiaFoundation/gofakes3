@@ -125,6 +125,10 @@ type PutObjectResult struct {
 	// created version ID. If versioning is not enabled, this should be
 	// empty.
 	VersionID VersionID
+
+	// ETag is the value of the ETag header returned by the backend, stripped of
+	// its quotation marks.
+	ETag string
 }
 
 // Backend provides a set of operations to be implemented in order to support
