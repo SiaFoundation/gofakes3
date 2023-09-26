@@ -955,12 +955,12 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 		}
 	}
 
-	etag, err := g.uploader.UploadPart(bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
+	res, err := g.uploader.UploadPart(bucket, object, uploadID, int(partNumber), r.ContentLength, rdr)
 	if err != nil {
 		return err
 	}
 
-	w.Header().Add("ETag", formatETag(etag))
+	w.Header().Add("ETag", res.ETag)
 	return nil
 }
 
