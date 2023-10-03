@@ -515,9 +515,11 @@ func (g *GoFakeS3) getObject(
 	obj.Range.writeHeader(obj.Size, w)
 
 	if _, err := io.Copy(w, obj.Contents); err != nil {
-		return err
+		// Log this failure but return 'nil'. We have already started sending
+		// data so we can't send an error response anymore anyway.
+		g.log.Print(LogErr, "error copying object contents", err)
+		return nil
 	}
-
 	return nil
 }
 
