@@ -479,6 +479,7 @@ func (g *GoFakeS3) getObject(
 
 	rnge, err := parseRangeHeader(r.Header.Get("Range"))
 	if err != nil {
+		fmt.Println("failed to parse range", r.Header.Get("Range"), err)
 		return err
 	}
 
