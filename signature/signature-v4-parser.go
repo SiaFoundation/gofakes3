@@ -38,10 +38,6 @@ func parseCredentialHeader(credElement string) (ch credentialHeader, err ErrorCo
 		},
 	}
 
-	if len(accessKey) < AccessKeyMinLen || len(accessKey) > AccessKeyMaxLen {
-		return ch, errInvalidAccessKeyID
-	}
-
 	if cred.scope.service != serviceS3 {
 		return ch, errInvalidServiceS3
 	}
