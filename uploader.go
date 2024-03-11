@@ -404,10 +404,14 @@ func (u *uploader) UploadPart(_ context.Context, bucket, object string, id Uploa
 	return &UploadPartResult{ETag: etag}, nil
 }
 
-func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
+func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, meta map[string]string, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
 		return nil, err
+	}
+
+	for k, v := range meta {
+		mpu.Meta[k] = v
 	}
 
 	mpu.mu.Lock()
