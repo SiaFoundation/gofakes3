@@ -970,7 +970,12 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		return err
 	}
 
-	res, err := g.uploader.CompleteMultipartUpload(r.Context(), bucket, object, uploadID, &in)
+	meta, err := metadataHeaders(r.Header, g.timeSource.Now(), g.metadataSizeLimit)
+	if err != nil {
+		return err
+	}
+
+	res, err := g.uploader.CompleteMultipartUpload(r.Context(), bucket, object, uploadID, meta, &in)
 	if err != nil {
 		return err
 	}

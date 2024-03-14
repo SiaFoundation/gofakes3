@@ -321,7 +321,7 @@ type MultipartBackend interface {
 	ListParts(ctx context.Context, bucket, object string, uploadID UploadID, marker int, limit int64) (*ListMultipartUploadPartsResult, error)
 
 	AbortMultipartUpload(ctx context.Context, bucket, object string, id UploadID) error
-	CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error)
+	CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, meta map[string]string, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error)
 }
 
 type AuthenticatedBackend interface {
