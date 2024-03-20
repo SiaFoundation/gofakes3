@@ -28,6 +28,14 @@ func (g *GoFakeS3) routeBase(w http.ResponseWriter, r *http.Request) {
 		err    error
 	)
 
+	// perform authentication if necessary
+	ab, ok := g.storage.(AuthenticatedBackend)
+	if ok {
+		if !ab.AuthenticateRequest(w, r, bucket) {
+			return // unable to authenticate
+		}
+	}
+
 	hdr := w.Header()
 
 	id := fmt.Sprintf("%016X", g.nextRequestID())

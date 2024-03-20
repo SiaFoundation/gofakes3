@@ -98,11 +98,6 @@ func (g *GoFakeS3) Server() http.Handler {
 	} else if g.hostBucket {
 		handler = g.hostBucketMiddleware(handler)
 	}
-
-	ab, ok := g.storage.(AuthenticatedBackend)
-	if ok {
-		handler = ab.AuthenticationMiddleware(handler)
-	}
 	return handler
 }
 

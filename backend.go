@@ -325,7 +325,7 @@ type MultipartBackend interface {
 }
 
 type AuthenticatedBackend interface {
-	AuthenticationMiddleware(http.Handler) http.Handler
+	AuthenticateRequest(w http.ResponseWriter, r *http.Request, bucket string) bool
 }
 
 // CopyObject is a helper function useful for quickly implementing CopyObject on
