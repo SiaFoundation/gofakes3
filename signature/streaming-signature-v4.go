@@ -165,10 +165,10 @@ var errChunkTooBig = errors.New("chunk too big: choose chunk size <= 16MiB")
 //
 // NewChunkedReader is not needed by normal applications. The http package
 // automatically decodes chunking when reading response bodies.
-func newSignV4ChunkedReader(req *http.Request, trailer bool) (io.ReadCloser, ErrorCode) {
+func newSignV4ChunkedReader(req *http.Request, trailer bool) (io.ReadCloser, Credentials, ErrorCode) {
 	cred, seedSignature, region, seedDate, errCode := calculateSeedSignature(req, trailer)
 	if errCode != ErrNone {
-		return nil, errCode
+		return nil, Credentials{}, errCode
 	}
 
 	if trailer {
@@ -191,7 +191,7 @@ func newSignV4ChunkedReader(req *http.Request, trailer bool) (io.ReadCloser, Err
 		chunkSHA256Writer: sha256.New(),
 		buffer:            make([]byte, 64*1024),
 		debug:             false,
-	}, ErrNone
+	}, cred, ErrNone
 }
 
 // Represents the overall state that is required for decoding a
