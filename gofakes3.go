@@ -155,7 +155,7 @@ func (g *GoFakeS3) hostBucketMiddleware(handler http.Handler) http.Handler {
 		if p != "/" {
 			rq.URL.Path += p
 		}
-		g.log.Print(LogInfo, p, "=>", rq.URL)
+		g.log.Print(LogDebug, p, "=>", rq.URL)
 
 		handler.ServeHTTP(w, rq)
 	})
@@ -194,7 +194,7 @@ func (g *GoFakeS3) hostBucketBaseMiddleware(handler http.Handler) http.Handler {
 		if p != "/" {
 			rq.URL.Path += p
 		}
-		g.log.Print(LogInfo, p, "=>", rq.URL)
+		g.log.Print(LogDebug, p, "=>", rq.URL)
 
 		handler.ServeHTTP(w, rq)
 	})
@@ -246,7 +246,7 @@ func (g *GoFakeS3) listBuckets(w http.ResponseWriter, r *http.Request) error {
 // - https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGET.html
 // - https://docs.aws.amazon.com/AmazonS3/latest/API/v2-RESTBucketGET.html
 func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "LIST BUCKET")
+	g.log.Print(LogDebug, "LIST BUCKET")
 
 	if err := g.ensureBucketExists(r.Context(), bucketName); err != nil {
 		return err
@@ -261,7 +261,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 
 	isVersion2 := q.Get("list-type") == "2"
 
-	g.log.Print(LogInfo, "bucketname:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
+	g.log.Print(LogDebug, "bucketname:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
 
 	objects, err := g.storage.ListBucket(r.Context(), bucketName, &prefix, page)
 	if err != nil {
@@ -344,7 +344,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 }
 
 func (g *GoFakeS3) getBucketLocation(bucketName string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "GET BUCKET LOCATION")
+	g.log.Print(LogDebug, "GET BUCKET LOCATION")
 
 	if err := g.ensureBucketExists(r.Context(), bucketName); err != nil { // S300006
 		return err
@@ -409,7 +409,7 @@ func (g *GoFakeS3) listBucketVersions(bucketName string, w http.ResponseWriter, 
 
 // CreateBucket creates a new S3 bucket in the BoltDB storage.
 func (g *GoFakeS3) createBucket(bucket string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "CREATE BUCKET:", bucket)
+	g.log.Print(LogDebug, "CREATE BUCKET:", bucket)
 
 	if err := ValidateBucketName(bucket); err != nil {
 		return err
@@ -426,7 +426,7 @@ func (g *GoFakeS3) createBucket(bucket string, w http.ResponseWriter, r *http.Re
 // DeleteBucket deletes the bucket in the underlying backend, if and only if it
 // contains no items.
 func (g *GoFakeS3) deleteBucket(bucket string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "DELETE BUCKET:", bucket)
+	g.log.Print(LogDebug, "DELETE BUCKET:", bucket)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -441,8 +441,8 @@ func (g *GoFakeS3) deleteBucket(bucket string, w http.ResponseWriter, r *http.Re
 
 // HeadBucket checks whether a bucket exists.
 func (g *GoFakeS3) headBucket(bucket string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "HEAD BUCKET", bucket)
-	g.log.Print(LogInfo, "bucketname:", bucket)
+	g.log.Print(LogDebug, "HEAD BUCKET", bucket)
+	g.log.Print(LogDebug, "bucketname:", bucket)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -471,7 +471,7 @@ func (g *GoFakeS3) getObject(
 	r *http.Request,
 ) error {
 
-	g.log.Print(LogInfo, "GET OBJECT", "Bucket:", bucket, "Object:", object)
+	g.log.Print(LogDebug, "GET OBJECT", "Bucket:", bucket, "Object:", object)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -569,7 +569,7 @@ func (g *GoFakeS3) headObject(
 	r *http.Request,
 ) error {
 
-	g.log.Print(LogInfo, "HEAD OBJECT", bucket, object)
+	g.log.Print(LogDebug, "HEAD OBJECT", bucket, object)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -597,7 +597,7 @@ func (g *GoFakeS3) headObject(
 // createObjectBrowserUpload allows objects to be created from a multipart upload initiated
 // by a browser form.
 func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "CREATE OBJECT THROUGH BROWSER UPLOAD")
+	g.log.Print(LogDebug, "CREATE OBJECT THROUGH BROWSER UPLOAD")
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -614,8 +614,8 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 	}
 	key := keyValues[0]
 
-	g.log.Print(LogInfo, "(BUC)", bucket)
-	g.log.Print(LogInfo, "(KEY)", key)
+	g.log.Print(LogDebug, "(BUC)", bucket)
+	g.log.Print(LogDebug, "(KEY)", key)
 
 	fileValues := r.MultipartForm.File["file"]
 	if len(fileValues) != 1 {
@@ -662,7 +662,7 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 
 // CreateObject creates a new S3 object.
 func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r *http.Request) (err error) {
-	g.log.Print(LogInfo, "CREATE OBJECT:", bucket, object)
+	g.log.Print(LogDebug, "CREATE OBJECT:", bucket, object)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -715,7 +715,7 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 	}
 
 	if result.VersionID != "" {
-		g.log.Print(LogInfo, "CREATED VERSION:", bucket, object, result.VersionID)
+		g.log.Print(LogDebug, "CREATED VERSION:", bucket, object, result.VersionID)
 		w.Header().Set("x-amz-version-id", string(result.VersionID))
 	}
 
@@ -735,7 +735,7 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 	}
 
 	source := meta["X-Amz-Copy-Source"]
-	g.log.Print(LogInfo, "COPY:", source, "TO", bucket, object)
+	g.log.Print(LogDebug, "COPY:", source, "TO", bucket, object)
 
 	if len(object) > KeySizeLimit {
 		return ResourceError(ErrKeyTooLong, object)
@@ -788,7 +788,7 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 }
 
 func (g *GoFakeS3) deleteObject(bucket, object string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "DELETE:", bucket, object)
+	g.log.Print(LogDebug, "DELETE:", bucket, object)
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
@@ -817,7 +817,7 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 		return ErrNotImplemented
 	}
 
-	g.log.Print(LogInfo, "DELETE VERSION:", bucket, object, version)
+	g.log.Print(LogDebug, "DELETE VERSION:", bucket, object, version)
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
@@ -826,7 +826,7 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 	if err != nil {
 		return err
 	}
-	g.log.Print(LogInfo, "DELETED VERSION:", bucket, object, version)
+	g.log.Print(LogDebug, "DELETED VERSION:", bucket, object, version)
 
 	if result.IsDeleteMarker {
 		w.Header().Set("x-amz-delete-marker", "true")
@@ -845,7 +845,7 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 // deleteMulti deletes multiple S3 objects from the bucket.
 // https://docs.aws.amazon.com/AmazonS3/latest/API/multiobjectdeleteapi.html
 func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "delete multi", bucket)
+	g.log.Print(LogDebug, "delete multi", bucket)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
@@ -884,7 +884,7 @@ func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Req
 }
 
 func (g *GoFakeS3) initiateMultipartUpload(bucket, object string, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "initiate multipart upload", bucket, object)
+	g.log.Print(LogDebug, "initiate multipart upload", bucket, object)
 
 	meta, err := metadataHeaders(r.Header, g.timeSource.Now(), g.metadataSizeLimit)
 	if err != nil {
@@ -914,7 +914,7 @@ func (g *GoFakeS3) initiateMultipartUpload(bucket, object string, w http.Respons
 //	is overwritten. Each part must be at least 5 MB in size, except the last
 //	part. There is no size limit on the last part of your multipart upload.
 func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "put multipart upload", bucket, object, uploadID)
+	g.log.Print(LogDebug, "put multipart upload", bucket, object, uploadID)
 
 	partNumber, err := strconv.ParseInt(r.URL.Query().Get("partNumber"), 10, 0)
 	if err != nil || partNumber <= 0 || partNumber > MaxUploadPartNumber {
@@ -954,7 +954,7 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 }
 
 func (g *GoFakeS3) abortMultipartUpload(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "abort multipart upload", bucket, object, uploadID)
+	g.log.Print(LogDebug, "abort multipart upload", bucket, object, uploadID)
 	if err := g.uploader.AbortMultipartUpload(r.Context(), bucket, object, uploadID); err != nil {
 		return err
 	}
@@ -963,7 +963,7 @@ func (g *GoFakeS3) abortMultipartUpload(bucket, object string, uploadID UploadID
 }
 
 func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
-	g.log.Print(LogInfo, "complete multipart upload", bucket, object, uploadID)
+	g.log.Print(LogDebug, "complete multipart upload", bucket, object, uploadID)
 
 	var in CompleteMultipartUploadRequest
 	if err := g.xmlDecodeBody(r.Body, &in); err != nil {
@@ -1081,7 +1081,7 @@ func (g *GoFakeS3) putBucketVersioning(bucket string, w http.ResponseWriter, r *
 		}
 	}
 
-	g.log.Print(LogInfo, "PUT VERSIONING:", in.Status)
+	g.log.Print(LogDebug, "PUT VERSIONING:", in.Status)
 	return g.versioned.SetVersioningConfiguration(r.Context(), bucket, in)
 }
 
