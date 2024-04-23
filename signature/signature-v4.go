@@ -142,7 +142,7 @@ func getSigningKey(secretKey string, t time.Time, region string) []byte {
 	return signingKey
 }
 
-func authTypeSignedVerify(r *http.Request) ErrorCode {
+func authTypeSignedVerify(r *http.Request) (string, ErrorCode) {
 	// Copy request.
 	req := *r
 	hashedPayload := getContentSha256Cksum(r)
@@ -153,32 +153,32 @@ func authTypeSignedVerify(r *http.Request) ErrorCode {
 	// Parse signature version '4' header.
 	signV4Values, Err := parseSignV4(v4Auth)
 	if Err != ErrNone {
-		return Err
+		return "", Err
 	}
 
 	cred, _, Err := checkKeyValid(r, signV4Values.Credential.accessKey)
 	if Err != ErrNone {
-		return Err
+		return "", Err
 	}
 
 	// Extract all the signed headers along with its values.
 	extractedSignedHeaders, ErrCode := extractSignedHeaders(signV4Values.SignedHeaders, r)
 	if ErrCode != ErrNone {
-		return ErrCode
+		return "", ErrCode
 	}
 
 	// Extract date, if not present throw Error.
 	var date string
 	if date = req.Header.Get(amzDate); date == "" {
 		if date = r.Header.Get(headerDate); date == "" {
-			return errMissingDateHeader
+			return "", errMissingDateHeader
 		}
 	}
 
 	// Parse date header.
 	t, e := time.Parse(iso8601Format, date)
 	if e != nil {
-		return errMalformedDate
+		return "", errMalformedDate
 	}
 
 	// Query string.
@@ -198,49 +198,51 @@ func authTypeSignedVerify(r *http.Request) ErrorCode {
 
 	// Verify if signature match.
 	if !compareSignatureV4(newSignature, signV4Values.Signature) {
-		return errSignatureDoesNotMatch
+		return "", errSignatureDoesNotMatch
 	}
 
 	// Return Error none.
-	return ErrNone
+	return cred.AccessKey, ErrNone
 }
 
-func authTypeStreamingVerify(r *http.Request, authType authType) ErrorCode {
+func authTypeStreamingVerify(r *http.Request, authType authType) (string, ErrorCode) {
 	var size int64
 	if sizeStr, ok := r.Header["X-Amz-Decoded-Content-Length"]; ok {
 		if sizeStr[0] == "" {
-			return errMissingContentLength
+			return "", errMissingContentLength
 		}
 		var err error
 		size, err = strconv.ParseInt(sizeStr[0], 10, 64)
 		if err != nil {
-			return errMissingContentLength
+			return "", errMissingContentLength
 		}
 	}
+	var cred Credentials
 	var rc io.ReadCloser
 	var ec ErrorCode
 	switch authType {
 	case authTypeStreamingSigned, authTypeStreamingSignedTrailer:
-		rc, ec = newSignV4ChunkedReader(r, authType == authTypeStreamingSignedTrailer)
+		rc, cred, ec = newSignV4ChunkedReader(r, authType == authTypeStreamingSignedTrailer)
 	case authTypeStreamingUnsignedTrailer:
-		return errUnsupportAlgorithm // not supported
+		return "", errUnsupportAlgorithm // not supported
 	default:
 		panic("can't call authTypeStreamingVerify with a non streaming auth type")
 	}
 	if ec != ErrNone {
-		return ec
+		return "", ec
 	}
 	r.Body = rc
 	r.ContentLength = size
 	r.Header.Set("Content-Length", fmt.Sprint(size))
-	return ErrNone
+	return cred.AccessKey, ErrNone
 }
 
 // V4SignVerify - Verify authorization header with calculated header in accordance with
 //   - http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
 //
-// returns nil if signature matches.
-func V4SignVerify(r *http.Request) ErrorCode {
+// returns ErrNone if signature matches alongside the access key used for the
+// authentication
+func V4SignVerify(r *http.Request) (string, ErrorCode) {
 	// Make sure the authentication type is supported.
 	authType := getRequestAuthType(r)
 	switch authType {
@@ -249,6 +251,6 @@ func V4SignVerify(r *http.Request) ErrorCode {
 	case authTypeSigned:
 		return authTypeSignedVerify(r)
 	default:
-		return errUnsupportAlgorithm
+		return "", errUnsupportAlgorithm
 	}
 }

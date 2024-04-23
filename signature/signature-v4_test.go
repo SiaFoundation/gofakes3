@@ -37,7 +37,6 @@ func RandString(n int) string {
 }
 
 func TestSignatureMatch(t *testing.T) {
-
 	Body := bytes.NewReader(nil)
 
 	ak := RandString(32)
@@ -58,7 +57,9 @@ func TestSignatureMatch(t *testing.T) {
 		t.Error(err)
 	}
 
-	if result := signature.V4SignVerify(req); result != signature.ErrNone {
+	if accessKey, result := signature.V4SignVerify(req); result != signature.ErrNone {
 		t.Error(fmt.Errorf("invalid result: expect none but got %+v", signature.GetAPIError(result)))
+	} else if accessKey != ak {
+		t.Error(fmt.Errorf("invalid access key: expect %s but got %s", ak, accessKey))
 	}
 }
