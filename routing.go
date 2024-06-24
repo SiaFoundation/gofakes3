@@ -31,7 +31,7 @@ func (g *GoFakeS3) routeBase(w http.ResponseWriter, r *http.Request) {
 	// perform authentication if necessary
 	ab, ok := g.storage.(AuthenticatedBackend)
 	if ok {
-		if !ab.AuthenticateRequest(w, r, bucket) {
+		if !ab.IsAuthenticated(w, r, bucket) {
 			return // unable to authenticate
 		}
 	}
