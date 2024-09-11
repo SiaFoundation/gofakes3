@@ -742,6 +742,9 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 
 	// XXX No support for versionId subresource
 	parts := strings.SplitN(strings.TrimPrefix(source, "/"), "/", 2)
+	if len(parts) != 2 {
+		return ErrInvalidArgument
+	}
 	srcBucket := parts[0]
 	srcKey := strings.SplitN(parts[1], "?", 2)[0]
 
