@@ -39,6 +39,7 @@ type fakeS3Flags struct {
 	hostBucket      bool
 	hostBucketBases HostList
 	autoBucket      bool
+	insecureCORS    bool
 	quiet           bool
 
 	boltDb              string
@@ -60,6 +61,7 @@ func (f *fakeS3Flags) attach(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&f.fixedTimeStr, "time", "", "RFC3339 format. If passed, the server's clock will always see this time; does not affect existing stored dates.")
 	flagSet.StringVar(&f.initialBucket, "initialbucket", "", "If passed, this bucket will be created on startup if it does not already exist.")
 	flagSet.BoolVar(&f.noIntegrity, "no-integrity", false, "Pass this flag to disable Content-MD5 validation when uploading.")
+	flagSet.BoolVar(&f.insecureCORS, "insecure-cors", false, "If true, CORS headers in preflight requests will always allow anything.")
 	flagSet.BoolVar(&f.autoBucket, "autobucket", false, "If passed, nonexistent buckets will be created on first use instead of raising an error")
 	flagSet.BoolVar(&f.hostBucket, "hostbucket", false, ""+
 		"If passed, the bucket name will be extracted from the first segment of the hostname, "+
@@ -262,7 +264,7 @@ func run() error {
 		logger = gofakes3.DiscardLog()
 	}
 
-	faker, err := gofakes3.New(backend,
+	options := []gofakes3.Option{
 		gofakes3.WithIntegrityCheck(!values.noIntegrity),
 		gofakes3.WithTimeSkewLimit(timeSkewLimit),
 		gofakes3.WithTimeSource(timeSource),
@@ -270,7 +272,11 @@ func run() error {
 		gofakes3.WithHostBucket(values.hostBucket),
 		gofakes3.WithHostBucketBase(values.hostBucketBases.Values...),
 		gofakes3.WithAutoBucket(values.autoBucket),
-	)
+	}
+	if values.insecureCORS {
+		options = append(options, gofakes3.WithInsecureCORS())
+	}
+	faker, err := gofakes3.New(backend, options...)
 	if err != nil {
 		return fmt.Errorf("gofakes3: could not create faker: %w", err)
 	}

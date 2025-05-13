@@ -75,6 +75,9 @@ const (
 	// See BucketNotFound() for a helper function for this error:
 	ErrNoSuchBucket ErrorCode = "NoSuchBucket"
 
+	// The specified bucket does not exist.
+	ErrNonExistentBucket ErrorCode = "NonExistentBucket"
+
 	// See KeyNotFound() for a helper function for this error:
 	ErrNoSuchKey ErrorCode = "NoSuchKey"
 

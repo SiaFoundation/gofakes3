@@ -277,6 +277,36 @@ func (db *MultiBucketBackend) DeleteBucket(_ context.Context, name string) (rerr
 	return rerr
 }
 
+func (db *MultiBucketBackend) ForceDeleteBucket(_ context.Context, name string) error {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
+	// Delete all objects in the bucket
+	entries, err := afero.ReadDir(db.bucketFs, name)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		fullPath := path.Join(name, entry.Name())
+		if err := db.bucketFs.RemoveAll(fullPath); err != nil {
+			return err
+		}
+	}
+
+	// Delete the bucket itself
+	if err := db.bucketFs.RemoveAll(name); err != nil {
+		return err
+	}
+
+	// Delete bucket metadata
+	if err := db.metaStore.deleteBucket(name); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (db *MultiBucketBackend) BucketExists(_ context.Context, name string) (exists bool, err error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
