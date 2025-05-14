@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/credentials"
+	v4signer "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"go.sia.tech/gofakes3/signature"
 )
 
@@ -92,8 +94,10 @@ func TestSignatureMatch(t *testing.T) {
 				t.Error(err)
 			}
 
-			if result := signature.V4SignVerify(req); result != signature.ErrNone {
+			if accessKey, result := signature.V4SignVerify(req); result != signature.ErrNone {
 				t.Errorf("invalid result: expect none but got %+v", signature.GetAPIError(result))
+			} else if accessKey != ak {
+				t.Errorf("invalid access key: expect %s but got %s", ak, accessKey)
 			}
 		})
 	}
@@ -126,8 +130,10 @@ func TestUnsignedPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if result := signature.V4SignVerify(req); result != signature.ErrNone {
+	if accessKey, result := signature.V4SignVerify(req); result != signature.ErrNone {
 		t.Errorf("invalid result for unsigned payload: expect none but got %+v", signature.GetAPIError(result))
+	} else if accessKey != ak {
+		t.Errorf("invalid access key for unsigned payload: expect %s but got %s", ak, accessKey)
 	}
 }
 
@@ -239,7 +245,7 @@ func TestCheckExpiration(t *testing.T) {
 			// Mock time passing
 			signature.TimeNow = func() time.Time { return now.Add(tc.timeDelta) }
 
-			result := signature.V4SignVerify(req)
+			_, result := signature.V4SignVerify(req)
 			if result == signature.ErrNone && tc.expectedError {
 				t.Errorf("invalid result: expected error but got no error")
 			}

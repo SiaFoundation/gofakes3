@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -19,8 +18,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	xml "github.com/minio/xxml"
 	"go.sia.tech/gofakes3"
+	"go.sia.tech/gofakes3/backend/s3mem"
 )
 
 var mockR, _ = http.NewRequest(http.MethodGet, "http://localhost:9000", nil)
@@ -296,8 +297,9 @@ func TestCreateObjectWithContentEncoding(t *testing.T) {
 	ts := newTestServer(t)
 	defer ts.Close()
 	svc := ts.s3Client()
+	ctx := context.Background()
 
-	_, err := svc.PutObject(&s3.PutObjectInput{
+	_, err := svc.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(defaultBucket),
 		Key:    aws.String("object"),
 		Body: bytes.NewReader([]byte{ // "hello", gzipped
@@ -310,7 +312,7 @@ func TestCreateObjectWithContentEncoding(t *testing.T) {
 	})
 	ts.OK(err)
 
-	obj, err := svc.GetObject(&s3.GetObjectInput{
+	obj, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(defaultBucket),
 		Key:    aws.String("object"),
 	})
