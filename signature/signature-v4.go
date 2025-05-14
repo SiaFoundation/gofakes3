@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -156,7 +155,12 @@ func getSigningKey(secretKey string, t time.Time, region string) []byte {
 	return signingKey
 }
 
-func authTypeSignedVerify(r *http.Request) (string, ErrorCode) {
+// V4SignVerify - Verify authorization header with calculated header in accordance with
+//   - http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
+//
+// returns ErrNone if signature matches alongside the access key used for the
+// authentication
+func V4SignVerify(r *http.Request) (string, ErrorCode) {
 	// Copy request.
 	req := *r
 	queryf := req.URL.Query()
@@ -256,54 +260,4 @@ func authTypeSignedVerify(r *http.Request) (string, ErrorCode) {
 
 	// Return Error none.
 	return cred.AccessKey, ErrNone
-}
-
-func authTypeStreamingVerify(r *http.Request, authType authType) (string, ErrorCode) {
-	var size int64
-	if sizeStr, ok := r.Header["X-Amz-Decoded-Content-Length"]; ok {
-		if sizeStr[0] == "" {
-			return "", errMissingContentLength
-		}
-		var err error
-		size, err = strconv.ParseInt(sizeStr[0], 10, 64)
-		if err != nil {
-			return "", errMissingContentLength
-		}
-	}
-	var cred Credentials
-	var rc io.ReadCloser
-	var ec ErrorCode
-	switch authType {
-	case authTypeStreamingSigned, authTypeStreamingSignedTrailer:
-		rc, cred, ec = newSignV4ChunkedReader(r, authType == authTypeStreamingSignedTrailer)
-	case authTypeStreamingUnsignedTrailer:
-		return "", errUnsupportAlgorithm // not supported
-	default:
-		panic("can't call authTypeStreamingVerify with a non streaming auth type")
-	}
-	if ec != ErrNone {
-		return "", ec
-	}
-	r.Body = rc
-	r.ContentLength = size
-	r.Header.Set("Content-Length", fmt.Sprint(size))
-	return cred.AccessKey, ErrNone
-}
-
-// V4SignVerify - Verify authorization header with calculated header in accordance with
-//   - http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
-//
-// returns ErrNone if signature matches alongside the access key used for the
-// authentication
-func V4SignVerify(r *http.Request) (string, ErrorCode) {
-	// Make sure the authentication type is supported.
-	authType := getRequestAuthType(r)
-	switch authType {
-	case authTypeStreamingSigned, authTypeStreamingSignedTrailer, authTypeStreamingUnsignedTrailer:
-		return authTypeStreamingVerify(r, authType)
-	case authTypeSigned:
-		return authTypeSignedVerify(r)
-	default:
-		return "", errUnsupportAlgorithm
-	}
 }

@@ -733,10 +733,23 @@ func (g *GoFakeS3) createObject(bucket, object string, w http.ResponseWriter, r 
 		}
 	}
 
+	var reader io.Reader
+
+	if sha, ok := meta["X-Amz-Content-Sha256"]; ok && sha == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
+		reader = newChunkedReader(r.Body)
+		size, err = strconv.ParseInt(meta["X-Amz-Decoded-Content-Length"], 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest) // XXX: no code for this, according to s3tests
+			return nil
+		}
+	} else {
+		reader = r.Body
+	}
+
 	// hashingReader is still needed to get the ETag even if integrityCheck
 	// is set to false:
-	rdr, err := newHashingReader(r.Body, md5Base64)
-	defer r.Body.Close()
+	rdr, err := newHashingReader(reader, md5Base64)
+	defer CheckClose(r.Body, &err)
 	if err != nil {
 		return err
 	}
@@ -880,7 +893,7 @@ func (g *GoFakeS3) deleteObjectVersion(bucket, object string, version VersionID,
 
 // deleteMulti deletes multiple S3 objects from the bucket.
 // https://docs.aws.amazon.com/AmazonS3/latest/API/multiobjectdeleteapi.html
-func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Request) error {
+func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Request) (err error) {
 	g.log.Print(LogDebug, "delete multi", bucket)
 
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
@@ -889,7 +902,6 @@ func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Req
 
 	var in DeleteRequest
 
-	var err error
 	defer CheckClose(r.Body, &err)
 	dc := xml.NewDecoder(r.Body)
 	if err := dc.Decode(&in); err != nil {
@@ -949,7 +961,7 @@ func (g *GoFakeS3) initiateMultipartUpload(bucket, object string, w http.Respons
 //	part number that was used with a previous part, the previously uploaded part
 //	is overwritten. Each part must be at least 5 MB in size, except the last
 //	part. There is no size limit on the last part of your multipart upload.
-func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) error {
+func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID UploadID, w http.ResponseWriter, r *http.Request) (err error) {
 	g.log.Print(LogDebug, "put multipart upload", bucket, object, uploadID)
 
 	partNumber, err := strconv.ParseInt(r.URL.Query().Get("partNumber"), 10, 0)
@@ -962,8 +974,24 @@ func (g *GoFakeS3) putMultipartUploadPart(bucket, object string, uploadID Upload
 		return ErrMissingContentLength
 	}
 
-	defer r.Body.Close()
-	var rdr io.Reader = r.Body
+	defer CheckClose(r.Body, &err)
+
+	meta, err := metadataHeaders(r.Header, g.timeSource.Now(), g.metadataSizeLimit)
+	if err != nil {
+		return err
+	}
+
+	var rdr io.Reader
+	if sha, ok := meta["X-Amz-Content-Sha256"]; ok && sha == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
+		rdr = newChunkedReader(r.Body)
+		size, err = strconv.ParseInt(meta["X-Amz-Decoded-Content-Length"], 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest) // XXX: no code for this, according to s3tests
+			return nil
+		}
+	} else {
+		rdr = r.Body
+	}
 
 	if g.integrityCheck {
 		md5Base64 := r.Header.Get("Content-MD5")
