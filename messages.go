@@ -1,11 +1,12 @@
 package gofakes3
 
 import (
-	"encoding/xml"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	xml "github.com/minio/xxml"
 )
 
 type Storage struct {
@@ -203,6 +204,8 @@ type ListBucketResultBase struct {
 
 	CommonPrefixes []CommonPrefix `xml:"CommonPrefixes,omitempty"`
 	Contents       []*Content     `xml:"Contents"`
+
+	EncodingType string `xml:"EncodingType,omitempty"`
 }
 
 type GetBucketLocation struct {
@@ -519,12 +522,12 @@ type VersionID string
 type VersioningConfiguration struct {
 	XMLName xml.Name `xml:"VersioningConfiguration"`
 
-	Status VersioningStatus `xml:"Status"`
+	Status VersioningStatus `xml:"Status,omitempty"`
 
 	// When enabled, the bucket owner must include the x-amz-mfa request header
 	// in requests to change the versioning state of a bucket and to
 	// permanently delete a versioned object.
-	MFADelete MFADeleteStatus `xml:"MfaDelete"`
+	MFADelete MFADeleteStatus `xml:"MfaDelete,omitempty"`
 }
 
 func (v *VersioningConfiguration) Enabled() bool {

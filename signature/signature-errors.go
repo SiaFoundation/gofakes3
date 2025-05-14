@@ -2,8 +2,9 @@ package signature
 
 import (
 	"bytes"
-	"encoding/xml"
 	"net/http"
+
+	xml "github.com/minio/xxml"
 )
 
 // ErrorCode is code[int] of APIError
@@ -19,7 +20,6 @@ type APIError struct {
 // the format of error response
 type errorResponse struct {
 	XMLName xml.Name `xml:"Error"`
-
 	Code    string
 	Message string
 }
@@ -41,8 +41,10 @@ const (
 	errUnsignedHeaders
 	errMissingDateHeader
 	errMalformedDate
+	errMalformedExpires
 	errUnsupportAlgorithm
 	errSignatureDoesNotMatch
+	errExpiredRequest
 
 	// ErrNone is None(err=nil)
 	ErrNone
@@ -121,6 +123,11 @@ var errorCodes = errorCodeMap{
 		Description:    "Invalid date format header, expected to be in ISO8601, RFC1123 or RFC1123Z time format.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
+	errMalformedExpires: {
+		Code:           "MalformedExpires",
+		Description:    "Invalid X-Amz-Expires, expected to be a number",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
 	errUnsupportAlgorithm: {
 		Code:           "UnsupportedAlgorithm",
 		Description:    "Encountered an unsupported algorithm.",
@@ -130,6 +137,11 @@ var errorCodes = errorCodeMap{
 		Code:           "SignatureDoesNotMatch",
 		Description:    "The request signature we calculated does not match the signature you provided. Check your key and signing method.",
 		HTTPStatusCode: http.StatusForbidden,
+	},
+	errExpiredRequest: {
+		Code:           "AccessDenied",
+		Description:    "The difference between the request time and the server's time exceeds the maximum allowed.",
+		HTTPStatusCode: http.StatusBadRequest,
 	},
 }
 

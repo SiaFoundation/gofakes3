@@ -4,6 +4,10 @@ import "time"
 
 type Option func(g *GoFakeS3)
 
+func WithV4Auth(authPair map[string]string) Option {
+	return func(g *GoFakeS3) { g.v4AuthPair = authPair }
+}
+
 // WithTimeSource allows you to substitute the behaviour of time.Now() and
 // time.Since() within GoFakeS3. This can be used to trigger time skew errors,
 // or to ensure the output of the commands is deterministic.

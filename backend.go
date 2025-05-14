@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 const (
@@ -354,7 +352,7 @@ func MergeMetadata(ctx context.Context, db Backend, bucketName string, objectNam
 	// get potential existing object to potentially carry metadata over
 	existingObj, err := db.GetObject(ctx, bucketName, objectName, nil)
 	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() != string(ErrNoSuchKey) {
+		if awsErr, ok := err.(*ErrorResponse); ok && awsErr.Code != ErrNoSuchKey {
 			return err
 		}
 	}

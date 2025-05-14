@@ -21,7 +21,6 @@ var bucketNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9\.-]+)[a-z0-9]$`)
 //
 // The DNS RFC confirms that the valid range of characters in an LDH label is 'a-z0-9-':
 // https://tools.ietf.org/html/rfc5890#section-2.3.1
-//
 func ValidateBucketName(name string) error {
 	if len(name) < 3 || len(name) > 63 {
 		return ErrorMessage(ErrInvalidBucketName, "bucket name must be >= 3 characters and <= 63")
@@ -46,10 +45,4 @@ func ValidateBucketName(name string) error {
 	}
 
 	return nil
-}
-
-var etagPattern = regexp.MustCompile(`^"[a-z0-9]+"$`)
-
-func validETag(v string) bool {
-	return etagPattern.MatchString(v)
 }

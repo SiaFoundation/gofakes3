@@ -9,7 +9,6 @@ import (
 //
 // example: Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request
 func parseCredentialHeader(credElement string) (ch credentialHeader, err ErrorCode) {
-
 	creds, err := extractFields(credElement, "Credential")
 	if err != ErrNone {
 		return ch, err
@@ -63,7 +62,7 @@ func parseSignedHeader(hdrElement string) ([]string, ErrorCode) {
 
 // Parse signature from signature tag.
 //
-// exmaple: Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024
+// example: Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024
 func parseSignature(signElement string) (string, ErrorCode) {
 	return extractFields(signElement, "Signature")
 }
@@ -85,7 +84,12 @@ func extractFields(signElement, fieldName string) (string, ErrorCode) {
 // Parses signature version '4' header of the following form.
 //
 //	Authorization: algorithm Credential=accessKeyID/credScope,  SignedHeaders=signedHeaders, Signature=signature
-func parseSignV4(v4Auth string) (sv signValues, err ErrorCode) {
+func ParseSignV4(v4Auth string) (sv signValues, err ErrorCode) {
+
+	if !strings.HasPrefix(v4Auth, "AWS4-HMAC-SHA256") {
+		return sv, errUnsupportAlgorithm
+	}
+
 	rawCred := strings.ReplaceAll(strings.TrimPrefix(v4Auth, "AWS4-HMAC-SHA256"), " ", "")
 	authFields := strings.Split(strings.TrimSpace(rawCred), ",")
 	if len(authFields) != 3 {

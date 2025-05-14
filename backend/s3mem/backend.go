@@ -295,9 +295,9 @@ func (db *Backend) DeleteMulti(_ context.Context, bucketName string, objects ...
 
 		if err != nil {
 			errres := gofakes3.ErrorResultFromError(err)
-			if errres.Code == gofakes3.ErrInternal {
-				// FIXME: log
-			}
+			// if errres.Code == gofakes3.ErrInternal {
+			// 	// FIXME: log
+			// }
 
 			result.Error = append(result.Error, errres)
 

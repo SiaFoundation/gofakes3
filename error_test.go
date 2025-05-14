@@ -1,9 +1,10 @@
 package gofakes3
 
 import (
-	"encoding/xml"
 	"testing"
 	"time"
+
+	xml "github.com/minio/xxml"
 )
 
 func TestErrorCustomResponseMarshalsAsExpected(t *testing.T) {

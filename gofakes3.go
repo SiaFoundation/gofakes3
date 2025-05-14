@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"math"
@@ -13,9 +12,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	xml "github.com/minio/xxml"
 	"go.sia.tech/gofakes3/signature"
 )
 
@@ -40,7 +41,9 @@ type GoFakeS3 struct {
 	uploader                MultipartBackend
 	log                     Logger
 
-	v4AuthPair map[string]string // key id -> secret key
+	// simple v4 signature
+	mu         sync.RWMutex // protects vAuthPair map only
+	v4AuthPair map[string]string
 }
 
 // New creates a new GoFakeS3 using the supplied Backend. Backends are pluggable.
@@ -61,9 +64,11 @@ func New(backend Backend, options ...Option) (*GoFakeS3, error) {
 	for _, opt := range options {
 		opt(s3)
 	}
+
 	if s3.log == nil {
 		s3.log = DiscardLog()
 	}
+
 	if s3.timeSource == nil {
 		s3.timeSource = DefaultTimeSource()
 	}
@@ -259,6 +264,11 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 	}
 
 	isVersion2 := q.Get("list-type") == "2"
+	encodingType := q.Get("encoding-type")
+	useUrlEncoding := encodingType == "url"
+	if !useUrlEncoding && encodingType != "" {
+		return ErrInvalidArgument
+	}
 
 	g.log.Print(LogDebug, "bucketname:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
 
@@ -291,6 +301,17 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 		Delimiter:      prefix.Delimiter,
 		Prefix:         prefix.Prefix,
 		MaxKeys:        page.MaxKeys,
+		EncodingType:   encodingType,
+	}
+	if useUrlEncoding {
+		base.Prefix = URLEncode(base.Prefix)
+		for i := range base.CommonPrefixes {
+			prefix := &base.CommonPrefixes[i]
+			prefix.Prefix = URLEncode(prefix.Prefix)
+		}
+		for _, content := range base.Contents {
+			content.Key = URLEncode(content.Key)
+		}
 	}
 
 	if !isVersion2 {
@@ -418,7 +439,10 @@ func (g *GoFakeS3) createBucket(bucket string, w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Set("Location", "/"+bucket)
-	w.Write([]byte{})
+	_, err := w.Write([]byte{})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -462,13 +486,22 @@ func (g *GoFakeS3) headBucket(bucket string, w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+// CheckClose is a utility function used to check the return from
+// Close in a defer statement.
+func CheckClose(c io.Closer, err *error) {
+	cerr := c.Close()
+	if *err == nil {
+		*err = cerr
+	}
+}
+
 // GetObject retrievs a bucket object.
 func (g *GoFakeS3) getObject(
 	bucket, object string,
 	versionID VersionID,
 	w http.ResponseWriter,
 	r *http.Request,
-) error {
+) (err error) {
 
 	g.log.Print(LogDebug, "GET OBJECT", "Bucket:", bucket, "Object:", object)
 
@@ -504,7 +537,7 @@ func (g *GoFakeS3) getObject(
 		g.log.Print(LogErr, "unexpected nil object for key", bucket, object)
 		return ErrInternal
 	}
-	defer obj.Contents.Close()
+	defer CheckClose(obj.Contents, &err)
 
 	if err := g.writeGetOrHeadObjectResponse(obj, w, r); err != nil {
 		return err
@@ -566,7 +599,7 @@ func (g *GoFakeS3) headObject(
 	versionID VersionID,
 	w http.ResponseWriter,
 	r *http.Request,
-) error {
+) (err error) {
 
 	g.log.Print(LogDebug, "HEAD OBJECT", bucket, object)
 
@@ -582,7 +615,7 @@ func (g *GoFakeS3) headObject(
 		g.log.Print(LogErr, "unexpected nil object for key", bucket, object)
 		return ErrInternal
 	}
-	defer obj.Contents.Close()
+	defer CheckClose(obj.Contents, &err)
 
 	if err := g.writeGetOrHeadObjectResponse(obj, w, r); err != nil {
 		return err
@@ -626,7 +659,7 @@ func (g *GoFakeS3) createObjectBrowserUpload(bucket string, w http.ResponseWrite
 	if err != nil {
 		return err
 	}
-	defer infile.Close()
+	defer CheckClose(infile, &err)
 
 	meta, err := metadataHeaders(r.MultipartForm.Value, g.timeSource.Now(), g.metadataSizeLimit)
 	if err != nil {
@@ -767,6 +800,7 @@ func (g *GoFakeS3) copyObject(bucket, object string, meta map[string]string, w h
 			meta[k] = v
 		}
 	}
+	delete(meta, "X-Amz-Acl")
 
 	result, err := g.storage.CopyObject(r.Context(), srcBucket, srcKey, bucket, object, meta)
 	if err != nil {
@@ -855,13 +889,13 @@ func (g *GoFakeS3) deleteMulti(bucket string, w http.ResponseWriter, r *http.Req
 
 	var in DeleteRequest
 
-	defer r.Body.Close()
+	var err error
+	defer CheckClose(r.Body, &err)
 	dc := xml.NewDecoder(r.Body)
 	if err := dc.Decode(&in); err != nil {
 		return ErrorMessage(ErrMalformedXML, err.Error())
 	}
 
-	var err error
 	var out MultiDeleteResult
 	if g.versioned == nil {
 		keys := make([]string, len(in.Objects))
@@ -1108,7 +1142,7 @@ func (g *GoFakeS3) ensureBucketExists(ctx context.Context, bucket string) error 
 }
 
 func (g *GoFakeS3) xmlEncoder(w http.ResponseWriter) *xml.Encoder {
-	w.Write([]byte(xml.Header))
+	_, _ = w.Write([]byte(xml.Header))
 	w.Header().Set("Content-Type", "application/xml")
 
 	xe := xml.NewEncoder(w)
@@ -1150,10 +1184,7 @@ func metadataSize(meta map[string]string) int {
 func metadataHeaders(headers map[string][]string, at time.Time, sizeLimit int) (map[string]string, error) {
 	meta := make(map[string]string)
 	for hk, hv := range headers {
-		if strings.HasPrefix(hk, "X-Amz-") ||
-			hk == "Content-Type" ||
-			hk == "Content-Disposition" ||
-			hk == "Content-Encoding" {
+		if strings.HasPrefix(hk, "X-Amz-") || strings.HasPrefix(hk, "Content-") || hk == "Cache-Control" {
 			meta[hk] = hv[0]
 		}
 	}

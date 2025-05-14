@@ -1,11 +1,12 @@
 package gofakes3
 
 import (
-	"encoding/xml"
 	"fmt"
 	"io"
 	"testing"
 	"time"
+
+	xml "github.com/minio/xxml"
 )
 
 func TestObjectListAddPrefix(t *testing.T) {

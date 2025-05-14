@@ -1,10 +1,11 @@
 package gofakes3
 
 import (
-	"encoding/xml"
 	"fmt"
 	"net/http"
 	"time"
+
+	xml "github.com/minio/xxml"
 )
 
 // Error codes are documented here:

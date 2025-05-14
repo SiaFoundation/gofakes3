@@ -84,7 +84,7 @@ func calculateSeedSignature(r *http.Request, trailers bool) (cred Credentials, s
 	v4Auth := req.Header.Get(headerAuth)
 
 	// Parse signature version '4' header.
-	signV4Values, errCode := parseSignV4(v4Auth)
+	signV4Values, errCode := ParseSignV4(v4Auth)
 	if errCode != ErrNone {
 		return cred, "", "", time.Time{}, errCode
 	}

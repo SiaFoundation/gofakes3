@@ -2,12 +2,13 @@ package gofakes3
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	xml "github.com/minio/xxml"
 )
 
 func TestHttpError(t *testing.T) {
