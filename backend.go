@@ -2,6 +2,7 @@ package gofakes3
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"time"
@@ -174,6 +175,11 @@ type Backend interface {
 	// AWS does not validate the bucket's name for anything other than existence.
 	DeleteBucket(ctx context.Context, name string) error
 
+	// ForceDeleteBucket must delete a bucket and all its contents, regardless of
+	// whether the bucket is empty or not. This is useful for testing purposes
+	// where you need to clean up after yourself.
+	ForceDeleteBucket(ctx context.Context, name string) error
+
 	// GetObject must return a gofakes3.ErrNoSuchKey error if the object does
 	// not exist. See gofakes3.KeyNotFound() for a convenient way to create
 	// one.
@@ -339,13 +345,13 @@ func CopyObject(ctx context.Context, db Backend, srcBucket, srcKey, dstBucket, d
 	}
 	defer c.Contents.Close()
 
-	res, err := db.PutObject(ctx, dstBucket, dstKey, meta, c.Contents, c.Size)
+	_, err = db.PutObject(ctx, dstBucket, dstKey, meta, c.Contents, c.Size)
 	if err != nil {
 		return
 	}
 
 	return CopyObjectResult{
-		ETag:         res.ETag,
+		ETag:         `"` + hex.EncodeToString(c.Hash) + `"`,
 		LastModified: NewContentTime(time.Now()),
 	}, nil
 }

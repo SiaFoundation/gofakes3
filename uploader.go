@@ -376,6 +376,8 @@ func (u *uploader) UploadPart(_ context.Context, bucket, object string, id Uploa
 	if len(body) != int(contentLength) {
 		return nil, ErrIncompleteBody
 	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
 		return nil, err
@@ -405,6 +407,9 @@ func (u *uploader) UploadPart(_ context.Context, bucket, object string, id Uploa
 }
 
 func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object string, id UploadID, meta map[string]string, input *CompleteMultipartUploadRequest) (*CompleteMultipartUploadResult, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	mpu, err := u.getUnlocked(bucket, object, id)
 	if err != nil {
 		return nil, err
@@ -446,8 +451,15 @@ func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object s
 	}
 
 	body := make([]byte, 0, size)
-	for _, part := range input.Parts {
-		body = append(body, mpu.parts[part.PartNumber].Body...)
+	hash := md5.New()
+	for _, inPart := range input.Parts {
+		upPart := mpu.parts[inPart.PartNumber]
+		body = append(body, upPart.Body...)
+		hashBytes, err := hex.DecodeString(strings.Trim(upPart.ETag, "\""))
+		if err != nil {
+			return nil, ErrorMessagef(ErrInternal, "invalid etag for number %d is stored: %s", inPart.PartNumber, err)
+		}
+		hash.Write(hashBytes)
 	}
 
 	result, err := u.storage.PutObject(ctx, bucket, object, mpu.Meta, bytes.NewReader(body), int64(len(body)))
@@ -457,7 +469,7 @@ func (u *uploader) CompleteMultipartUpload(ctx context.Context, bucket, object s
 
 	etag := result.ETag
 	if etag == "" {
-		etag = formatETag(fmt.Sprintf("%x", md5.Sum(body)))
+		etag = fmt.Sprintf(`"%s-%d"`, hex.EncodeToString(hash.Sum(nil)), len(input.Parts))
 	}
 
 	// if getUnlocked succeeded, so will this:

@@ -93,7 +93,10 @@ func (db *Backend) ListBucket(_ context.Context, name string, prefix *gofakes3.P
 
 	if page.Marker != "" {
 		iter.Seek(page.Marker)
-		iter.Next() // Move to the next item after the Marker
+		// If the current item is the Marker, move to the next item.
+		if iter.Key() == page.Marker {
+			iter.Next()
+		}
 	}
 
 	var cnt int64 = 0
@@ -103,18 +106,18 @@ func (db *Backend) ListBucket(_ context.Context, name string, prefix *gofakes3.P
 	for iter.Next() {
 		item := iter.Value().(*bucketObject)
 
-		if !prefix.Match(item.data.name, &match) {
+		switch {
+		case !prefix.Match(item.data.name, &match):
 			continue
-		} else if item.data.deleteMarker {
+		case item.data.deleteMarker:
 			continue
-		} else if match.CommonPrefix {
+		case match.CommonPrefix:
 			if match.MatchedPart == lastMatchedPart {
 				continue // Should not count towards keys
 			}
 			response.AddPrefix(match.MatchedPart)
 			lastMatchedPart = match.MatchedPart
-
-		} else {
+		default:
 			response.Add(&gofakes3.Content{
 				Key:          item.data.name,
 				LastModified: gofakes3.NewContentTime(item.data.lastModified),
@@ -156,6 +159,19 @@ func (db *Backend) DeleteBucket(_ context.Context, name string) error {
 
 	if db.buckets[name].objects.Len() > 0 {
 		return gofakes3.ResourceError(gofakes3.ErrBucketNotEmpty, name)
+	}
+
+	delete(db.buckets, name)
+
+	return nil
+}
+
+func (db *Backend) ForceDeleteBucket(_ context.Context, name string) error {
+	db.lock.Lock()
+	defer db.lock.Unlock()
+
+	if db.buckets[name] == nil {
+		return gofakes3.ErrNoSuchBucket
 	}
 
 	delete(db.buckets, name)
@@ -258,7 +274,6 @@ func (db *Backend) PutObject(ctx context.Context, bucketName, objectName string,
 		result.VersionID = item.versionID
 	}
 
-	result.ETag = item.etag
 	return result, nil
 }
 

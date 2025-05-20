@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cevatbarisyilmaz/ara"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -144,10 +146,11 @@ type testServer struct {
 	gofakes3.TimeSourceAdvancer
 	*gofakes3.GoFakeS3
 
-	backend   gofakes3.Backend
-	versioned gofakes3.VersionedBackend
-	server    *httptest.Server
-	options   []gofakes3.Option
+	backend       gofakes3.Backend
+	versioned     gofakes3.VersionedBackend
+	server        *httptest.Server
+	options       []gofakes3.Option
+	useHostBucket bool
 
 	// if this is nil, no buckets are created. by default, a starting bucket is
 	// created using the value of the 'defaultBucket' constant.
@@ -162,6 +165,12 @@ func withoutInitialBuckets() testServerOption {
 }
 func withInitialBuckets(buckets ...string) testServerOption {
 	return func(ts *testServer) { ts.initialBuckets = buckets }
+}
+func withHostBucket() testServerOption {
+	return func(ts *testServer) {
+		ts.options = append(ts.options, gofakes3.WithHostBucket(true))
+		ts.useHostBucket = true
+	}
 }
 func withVersioning() testServerOption {
 	return func(ts *testServer) { ts.versioning = true }
@@ -240,17 +249,17 @@ func (ts *testServer) backendCreateBucket(bucket string) {
 	}
 }
 
-func (ts *testServer) backendObjectExists(bucket, key string) bool {
+func (ts *testServer) backendObjectExists(bucket, key string) (bool, bool) {
 	ts.Helper()
 	obj, err := ts.backend.HeadObject(context.Background(), bucket, key)
 	if err != nil {
 		if hasErrorCode(err, gofakes3.ErrNoSuchKey) {
-			return false
+			return false, false
 		} else {
 			ts.Fatal(err)
 		}
 	}
-	return obj != nil
+	return obj != nil, false
 }
 
 func (ts *testServer) backendPutString(bucket, key string, meta map[string]string, in string) {
@@ -277,11 +286,13 @@ func (ts *testServer) backendGetString(bucket, key string, rnge *gofakes3.Object
 
 func (ts *testServer) s3Client() *s3.S3 {
 	ts.Helper()
+
 	config := aws.NewConfig()
 	config.WithEndpoint(ts.server.URL)
 	config.WithRegion("region")
+	config.WithHTTPClient(ara.NewClient(ara.NewCustomResolver(map[string][]string{fmt.Sprintf("%s.127.0.0.1", defaultBucket): {"127.0.0.1"}, "localhost": {"127.0.0.1"}})))
 	config.WithCredentials(credentials.NewStaticCredentials("dummy-access", "dummy-secret", ""))
-	config.WithS3ForcePathStyle(true) // Removes need for subdomain
+	config.WithS3ForcePathStyle(!ts.useHostBucket)
 	svc := s3.New(session.New(), config)
 	return svc
 }
@@ -342,9 +353,34 @@ func (ts *testServer) assertMultipartUpload(bucket, object string, body interfac
 		u.PartSize = options.partSize
 	})
 	ts.OK(err)
-	_ = out
+
+	// s3manager will use multipart upload if the body consists of more than 1 part of the specified part size
+	if options.partSize < int64(len(contents)) {
+		if expectedETag := calculateETagByBody(contents, options.partSize); *out.ETag != expectedETag {
+			ts.Fatal("multipart upload etag mismatch:", *out.ETag, "!=", expectedETag)
+		}
+	}
 
 	ts.assertObject(bucket, object, nil, body)
+}
+
+func calculateETagByBody(contents []byte, partSize int64) string {
+	partCount := len(contents) / int(partSize)
+	if len(contents)%int(partSize) != 0 {
+		partCount++
+	}
+
+	hash := md5.New()
+	toHash := contents[:]
+	for len(toHash) > 0 {
+		toHashPartSize := partSize
+		if reminderSize := int64(len(toHash)); reminderSize < partSize {
+			toHashPartSize = reminderSize
+		}
+		hash.Write(hashMD5Bytes(toHash[:toHashPartSize]))
+		toHash = toHash[toHashPartSize:]
+	}
+	return fmt.Sprintf(`"%s-%d"`, hex.EncodeToString(hash.Sum(nil)), partCount)
 }
 
 func (ts *testServer) createMultipartUpload(bucket, object string, meta map[string]string) (uploadID string) {
@@ -389,9 +425,42 @@ func (ts *testServer) assertCompleteUpload(bucket, object, uploadID string, part
 		},
 	})
 	ts.OK(err)
-	_ = mpu // FIXME: assert some of this
+
+	if mpu.Location == nil {
+		ts.Fatal("missing location")
+	}
+
+	// split into protocol, host, port
+	u, err := url.Parse(ts.server.URL)
+	ts.OK(err)
+
+	if ts.useHostBucket {
+		if *mpu.Location != fmt.Sprintf("%s://%s.%s/%s", u.Scheme, bucket, u.Host, object) {
+			ts.Fatal("unexpected location:", *mpu.Location)
+		}
+	} else {
+		if *mpu.Location != fmt.Sprintf("%s/%s/%s", ts.server.URL, bucket, object) {
+			ts.Fatal("unexpected location:", *mpu.Location)
+		}
+	}
+
+	if expectedETag := ts.calculateETagBodyByParts(parts); *mpu.ETag != expectedETag {
+		ts.Fatal("multipart upload etag mismatch:", *mpu.ETag, "!=", expectedETag)
+	}
 
 	ts.assertObject(bucket, object, nil, body)
+}
+
+func (ts *testServer) calculateETagBodyByParts(parts []*s3.CompletedPart) string {
+	hash := md5.New()
+	for _, part := range parts {
+		etagBytes, err := hex.DecodeString(strings.Trim(*part.ETag, `"`))
+		if err != nil {
+			ts.Fatal("failed to decode etag:", err)
+		}
+		hash.Write(etagBytes)
+	}
+	return fmt.Sprintf(`"%s-%d"`, hex.EncodeToString(hash.Sum(nil)), len(parts))
 }
 
 func (ts *testServer) assertAbortMultipartUpload(bucket, object string, uploadID gofakes3.UploadID) {
@@ -708,7 +777,7 @@ func (ts *testServer) listBucketV2Pages(prefix *gofakes3.Prefix, maxKeys int64, 
 	}
 
 	var rs listBucketResult
-	if err := (svc.ListObjectsV2Pages(in, func(out *s3.ListObjectsV2Output, lastPage bool) bool {
+	if err := svc.ListObjectsV2Pages(in, func(out *s3.ListObjectsV2Output, lastPage bool) bool {
 		pages++
 		if pages > pageLimit {
 			panic("stuck in a page loop")
@@ -716,7 +785,7 @@ func (ts *testServer) listBucketV2Pages(prefix *gofakes3.Prefix, maxKeys int64, 
 		rs.CommonPrefixes = append(rs.CommonPrefixes, out.CommonPrefixes...)
 		rs.Contents = append(rs.Contents, out.Contents...)
 		return !lastPage
-	})); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -725,6 +794,27 @@ func (ts *testServer) listBucketV2Pages(prefix *gofakes3.Prefix, maxKeys int64, 
 
 func (ts *testServer) Close() {
 	ts.server.Close()
+}
+
+// will return nil/no error if the bucket does not exist, as nothing to delete
+func (ts *testServer) ForceDeleteBucket(_ context.Context, name string) interface{} {
+	return nil
+}
+
+type NoSuchBucketError struct {
+	Name string
+}
+
+func (ts *testServer) backendForceDeleteBucket(name string) interface{} {
+	ts.Helper()
+	err := ts.backend.DeleteBucket(context.Background(), name)
+	if err != nil {
+		if hasErrorCode(err, gofakes3.ErrNoSuchBucket) {
+			return NoSuchBucketError{Name: name}
+		}
+		ts.Fatal("delete bucket failed", err)
+	}
+	return true
 }
 
 func hashMD5Bytes(body []byte) hashValue {

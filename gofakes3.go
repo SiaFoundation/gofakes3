@@ -29,14 +29,15 @@ type GoFakeS3 struct {
 	storage   Backend
 	versioned VersionedBackend
 
-	timeSource              TimeSource    // WithTimeSource
-	timeSkew                time.Duration // WithTimeSkewLimit
-	metadataSizeLimit       int           // WithMetadataSizeLimit
-	integrityCheck          bool          // WithIntegrityCheck
-	failOnUnimplementedPage bool          // WithUnimplementedPageError
-	hostBucket              bool          // WithHostBucket
-	hostBucketBases         []string      // WithHostBucketBase
-	autoBucket              bool          // WithAutoBucket
+	wrapCORS                func(h http.Handler) http.Handler // WithInsecureCORS
+	timeSource              TimeSource                        // WithTimeSource
+	timeSkew                time.Duration                     // WithTimeSkewLimit
+	metadataSizeLimit       int                               // WithMetadataSizeLimit
+	integrityCheck          bool                              // WithIntegrityCheck
+	failOnUnimplementedPage bool                              // WithUnimplementedPageError
+	hostBucket              bool                              // WithHostBucket
+	hostBucketBases         []string                          // WithHostBucketBase
+	autoBucket              bool                              // WithAutoBucket
 	uploader                MultipartBackend
 	log                     Logger
 
@@ -53,6 +54,7 @@ func New(backend Backend, options ...Option) (*GoFakeS3, error) {
 		metadataSizeLimit: DefaultMetadataSizeLimit,
 		integrityCheck:    true,
 		requestID:         0,
+		wrapCORS:          wrapCORS,
 	}
 
 	// versioned MUST be set before options as one of the options disables it:
@@ -87,7 +89,7 @@ func (g *GoFakeS3) nextRequestID() uint64 {
 
 // Create the AWS S3 API
 func (g *GoFakeS3) Server() http.Handler {
-	var handler http.Handler = &withCORS{r: http.HandlerFunc(g.routeBase), log: g.log}
+	var handler http.Handler = g.wrapCORS(http.HandlerFunc(g.routeBase))
 
 	if g.timeSkew != 0 {
 		handler = g.timeSkewMiddleware(handler)
@@ -260,7 +262,7 @@ func (g *GoFakeS3) listBucket(bucketName string, w http.ResponseWriter, r *http.
 
 	isVersion2 := q.Get("list-type") == "2"
 
-	g.log.Print(LogDebug, "bucketname:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
+	g.log.Print(LogDebug, "bucketName:", bucketName, "prefix:", prefix, "page:", fmt.Sprintf("%+v", page))
 
 	objects, err := g.storage.ListBucket(r.Context(), bucketName, &prefix, page)
 	if err != nil {
@@ -430,6 +432,20 @@ func (g *GoFakeS3) deleteBucket(bucket string, w http.ResponseWriter, r *http.Re
 	if err := g.ensureBucketExists(r.Context(), bucket); err != nil {
 		return err
 	}
+
+	// Support for Minio's DeleteBucket with force-delete header.
+	forceDelete := r.Header.Get("x-minio-force-delete")
+	if forceDelete == "true" {
+		type forceDeleter interface {
+			ForceDeleteBucket(ctx context.Context, name string) error
+		}
+		if f, ok := g.storage.(forceDeleter); ok {
+			if err := f.ForceDeleteBucket(r.Context(), bucket); err != nil {
+				return err
+			}
+		}
+	}
+
 	if err := g.storage.DeleteBucket(r.Context(), bucket); err != nil {
 		return err
 	}
@@ -458,7 +474,10 @@ func (g *GoFakeS3) headBucket(bucket string, w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	w.Write([]byte{})
+	_, err := w.Write([]byte{})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -504,7 +523,12 @@ func (g *GoFakeS3) getObject(
 		g.log.Print(LogErr, "unexpected nil object for key", bucket, object)
 		return ErrInternal
 	}
-	defer obj.Contents.Close()
+	defer func(Contents io.ReadCloser) {
+		err := Contents.Close()
+		if err != nil {
+			g.log.Print(LogErr, "contents close", err.Error())
+		}
+	}(obj.Contents)
 
 	if err := g.writeGetOrHeadObjectResponse(obj, w, r); err != nil {
 		return err
@@ -900,7 +924,7 @@ func (g *GoFakeS3) initiateMultipartUpload(bucket, object string, w http.Respons
 	if err != nil {
 		return err
 	}
-	out := InitiateMultipartUpload{
+	out := InitiateMultipartUploadResult{
 		UploadID: uploadID,
 		Bucket:   bucket,
 		Key:      object,
@@ -986,10 +1010,23 @@ func (g *GoFakeS3) completeMultipartUpload(bucket, object string, uploadID Uploa
 		w.Header().Set("x-amz-version-id", string(res.VersionID))
 	}
 
-	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResponse{
-		ETag:   res.ETag,
-		Bucket: bucket,
-		Key:    object,
+	protocol := "http"
+	if r.TLS != nil {
+		protocol = "https"
+	}
+
+	var location string
+	if g.hostBucket {
+		location = fmt.Sprintf("%s://%s/%s", protocol, r.Host, object)
+	} else {
+		location = fmt.Sprintf("%s://%s/%s/%s", protocol, r.Host, bucket, object)
+	}
+
+	return g.xmlEncoder(w).Encode(&CompleteMultipartUploadResult{
+		ETag:     res.ETag,
+		Bucket:   bucket,
+		Key:      object,
+		Location: location,
 	})
 }
 
