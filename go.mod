@@ -7,7 +7,7 @@ require (
 	github.com/cevatbarisyilmaz/ara v0.0.4
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46
 	github.com/spf13/afero v1.14.0
-	go.etcd.io/bbolt v1.4.0
+	go.etcd.io/bbolt v1.4.1
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d
 	golang.org/x/tools v0.33.0
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce
