@@ -1,10 +1,10 @@
 module go.sia.tech/gofakes3
 
-go 1.24.0
+go 1.24.2
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8
-	github.com/cevatbarisyilmaz/ara v0.0.4
+	github.com/cevatbarisyilmaz/ara v0.0.5
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46
 	github.com/spf13/afero v1.15.0
 	go.etcd.io/bbolt v1.4.3
