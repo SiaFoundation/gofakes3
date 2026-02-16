@@ -9,7 +9,7 @@ require (
 	github.com/spf13/afero v1.15.0
 	go.etcd.io/bbolt v1.4.3
 	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d
-	golang.org/x/tools v0.38.0
+	golang.org/x/tools v0.42.0
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce
 )
 
@@ -17,7 +17,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
